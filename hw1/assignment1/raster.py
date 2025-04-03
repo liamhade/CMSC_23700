@@ -8,6 +8,22 @@ import numpy as np
 from utils import *
 from shapes import Shape, SVG, Triangle, Line, Circle
 
+'''
+Function that uses the point-slope formula to find the y-location of
+a value on a line given an x.
+
+Args:
+    p1 : One of the points of the line
+    p2 : Another point on the line
+    x  : Value of the x-axis
+
+Return:
+    y : Y-value of the line
+'''
+def line(p1: List[float], p2: List[float], x: float):
+    x1, y1 = p1
+    x2, y2 = p2
+    retrn 
 
 '''
 We don't want to have to look at every point in our viewbox
@@ -96,8 +112,7 @@ Return:
     region_tester (List[float] -> bool) : Function that tests if a point is inside the region
 '''
 def triangle_region_tester(line: List[List[float]], triangle_points: List[List[float]]) -> Callable[List[float], bool]:
-    point_to_the_right_of_line = lambda p: line[0][0] < p[0] or line[1][0] < p[0]
-    return any(point_to_the_right_of_line)
+    pass
 
 def rasterize(
     svg_file: str,
