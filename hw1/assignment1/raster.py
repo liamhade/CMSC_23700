@@ -20,10 +20,10 @@ Args:
 Return:
     y : Y-value of the line
 '''
-def line(p1: List[float], p2: List[float], x: float):
+def line_y(p1: List[float], p2: List[float], x: float):
     x1, y1 = p1
     x2, y2 = p2
-    return ((y2 - y1) / (x2 - x1))(x - x1) + y1
+    return ((y2 - y1) / (x2 - x1)) * (x - x1) + y1
 
 '''
 We don't want to have to look at every point in our viewbox
@@ -104,15 +104,25 @@ a triangle.
 We need the rest of the points (other_points) in addition to our line
 so that we know which side of the triangle is "within" the region.
 
+Note: this function has undefined behavaior if all three points of the triangle are in a line.
+
 Args:
     line [(x1, y1), (x2, y2)] : Pair of points defining the line / side of triangle
     triangle_points           : All the points of the triangle.
 
 Return:
-    region_tester (List[float] -> bool) : Function that tests if a point is inside the region
+    region_tester (List[float] -> bool) : Function that tests if a point is inside the line region
 '''
-def triangle_region_tester(line: List[List[float]], triangle_points: List[List[float]]) -> Callable[List[float], bool]:
-    pass
+def point_in_triangle_region(line: List[List[float]], triangle_points: List[List[float]]) -> Callable[List[float], bool]:
+    p1, p2 = line
+    for x, y in filter(lambda p: p not in line, triangle_points):
+        # Triangle point is above the line region,
+        # so our "inside" region will be above the line to.
+        if line_y(p1, p2, x) < y:
+            return lambda p: line(p1, p2, p[0]) < p[1]
+        # "Inside" region is below the line.
+        else:
+            return lambda p: line(p1, p2, p[0]) >= p[1]
 
 def rasterize(
     svg_file: str,
@@ -151,6 +161,6 @@ def rasterize(
     return img
 
 if __name__ == "__main__":
-    print(read_svg("tests/test1.svg")
+    print(read_svg("tests/test1.svg"))
 
     # rasterize("tests/test1.svg", 128, 128, output_file="your_output.png", antialias=False)
