@@ -23,7 +23,7 @@ Return:
 def line(p1: List[float], p2: List[float], x: float):
     x1, y1 = p1
     x2, y2 = p2
-    retrn 
+    return ((y2 - y1) / (x2 - x1))(x - x1) + y1
 
 '''
 We don't want to have to look at every point in our viewbox
