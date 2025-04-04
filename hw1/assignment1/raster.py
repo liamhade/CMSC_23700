@@ -2,7 +2,9 @@
 Remember that the coordinates for this program are centered
 around (0,0) being in the upper-left hand corner.
 
-# TODO: Be able to turn off anti-aliasing
+TODO: Be able to turn off anti-aliasing
+TODO: Fix anti-aliasing
+TODO: Make get_<shape>_coverage_for_pixel a single, generalizable function
 '''
 
 from typing import Optional, Callable, Tuple, List
@@ -43,11 +45,16 @@ Return:
 '''
 def bounding_box(shape: Shape) -> List[List[int]]:
     if shape.type in ["triangle", "line"]:
+        if shape.type == "triangle":
+            pts = shape.pts
+        elif shape.type == "line":
+            pts = LineCoverage().get_line_corners(shape)
+
         # Remember that the points of our SVG can be fractions,
         # while pixel vales can only be integers, so we need to
         # convert float to int.
-        xs = list(map(lambda p: int(p[0]), shape.pts))
-        ys = list(map(lambda p: int(p[1]), shape.pts))
+        xs = list(map(lambda p: int(p[0]), pts))
+        ys = list(map(lambda p: int(p[1]), pts))
         
         # Finding the extreme coordinates of our shape.
         min_x, max_x = min(xs), max(xs)
@@ -58,7 +65,7 @@ def bounding_box(shape: Shape) -> List[List[int]]:
 
         # Cartesion product of our X and Y values.
         return list(product(xs_bb, ys_bb))
-    
+
     elif shape.type == "circle":
         # Upper-left because on our pixel-grid, the origin
         # is in the upper-left.
@@ -168,6 +175,40 @@ class LineCoverage():
         return all(map(lambda tester: tester((x,y)), line_region_testers))
 
     '''
+    A Line() object is define by the location of its ends,
+    and its width. To find the region bounded by the line, we need
+    to figure out where the corners of the line are.
+
+    Args:
+        line : Line() object
+
+    Return:
+        corners : Set of four (x,y) coordinates for each corner of the line.
+    '''
+    def get_line_corners(self, line: Line) -> List[List[float]]:
+        (x1, y1), (x2, y2) = line.pts
+        dy, dx = y2-y1, x2-x1
+        # Angle of our line
+        theta = np.arctan(dy/dx)
+        dx_prime = np.sin(theta) * (line.width / 2)
+        dy_prime = np.cos(theta) * (line.width / 2)
+
+        '''
+        Now that we know how far each corner is from the middle of each of the
+        endpoints of our line, we can begin solving for the locations of the 
+        four corners of the line.
+        '''
+        # Line corners nearest the first edge point
+        p1 = (x1 - dx_prime, y1 + dy_prime)
+        p2 = (x1 + dx_prime, y1 - dy_prime)
+
+        # Line corners nearest the second edge point
+        p3 = (x2 - dx_prime, y2 + dy_prime)
+        p4 = (x2 + dx_prime, y2 - dy_prime)
+
+        return np.array([p1, p2, p3, p4])
+
+    '''
     The bounded region of a line with a width (w) can be thought of as the overlap
     between four regions marcated by the 4 sides of our line. This function creates 
     four functions, one for testing if a point is in each of the "inside" regions.
@@ -179,26 +220,12 @@ class LineCoverage():
         region_testers : Four region testers for checking if a point is in each region
     '''
     def create_line_region_testers(self, line: Line) -> Callable[List[float], bool]:
-        (x1, y1), (x2, y2) = line.pts
-        dy, dx = y2-y1, x2-x1
-        # Angle of our line
-        theta = np.arctan(dy/dx)
-        dx_prime = np.sin(theta) * (line.width / 2)
-        dy_prime = np.cos(theta) * (line.width / 2)
-
-        # Now that we know how far each corner is from the middle of each of the
-        # endpoints of our line, we can begin solving for the locations of the 
-        # four corners of the line.
-
-        # Line corners nearest the first edge point
-        p1 = (x1 - dx_prime, y1 + dy_prime)
-        p2 = (x1 + dx_prime, y1 - dy_prime)
-
-        # Line corners nearest the second edge point
-        p3 = (x2 - dx_prime, y2 + dy_prime)
-        p4 = (x2 + dx_prime, y2 - dy_prime)
-
-        points = [p1, p2, p3, p4, p1]
+        points = self.get_line_corners(line)
+        # Adding the start point to the end for ease of computing
+        # the final boundary edge of our line.
+        print(points)
+        points = np.append(points, points[0])
+        print(points)
         return [self.create_point_in_line_region_function(points[i:i+2], points) for i in range(4)]
 
     '''
@@ -278,6 +305,7 @@ class TriangleCoverage:
         region_testers : Three region testers for checking if a point is in each region
     '''
     def create_triangle_region_testers(self, triangle: Triangle) -> Callable[List[float], bool]:
+        if triangle.type != "triangle": return [] # TODO: rework the code so you don't have to do this
         return [self.create_point_in_triangle_region_function(triangle.pts[i:i+2], triangle.pts) for i in range(3)]
 
     '''
@@ -364,4 +392,9 @@ def rasterize(
 
 if __name__ == "__main__":
     # print(read_svg("tests/test1.svg"))
-    rasterize("tests/test1.svg", 128, 128, output_file="your_output.png", antialias=False)
+
+    # Triangle test
+    # rasterize("tests/test1.svg", 128, 128, output_file="your_output.png", antialias=False)
+
+    # Line test
+    rasterize("tests/test2.svg", 128, 128, output_file="your_output.png", antialias=False)
