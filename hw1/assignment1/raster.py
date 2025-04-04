@@ -2,7 +2,7 @@
 Remember that the coordinates for this program are centered
 around (0,0) being in the upper-left hand corner.
 
-# TODO: Be able to turn of anti-aliasing
+# TODO: Be able to turn off anti-aliasing
 '''
 
 from typing import Optional, Callable, Tuple, List
@@ -179,9 +179,27 @@ class LineCoverage():
         region_testers : Four region testers for checking if a point is in each region
     '''
     def create_line_region_testers(self, line: Line) -> Callable[List[float], bool]:
-        # TODO: Figure out what the four poitns of the line are (check your paper)...
-        return None
-        # return [self.create_point_in_line_region_function(line.pts[i:i+2], line.pts) for i in range(3)]
+        (x1, y1), (x2, y2) = line.pts
+        dy, dx = y2-y1, x2-x1
+        # Angle of our line
+        theta = np.arctan(dy/dx)
+        dx_prime = np.sin(theta) * (line.width / 2)
+        dy_prime = np.cos(theta) * (line.width / 2)
+
+        # Now that we know how far each corner is from the middle of each of the
+        # endpoints of our line, we can begin solving for the locations of the 
+        # four corners of the line.
+
+        # Line corners nearest the first edge point
+        p1 = (x1 - dx_prime, y1 + dy_prime)
+        p2 = (x1 + dx_prime, y1 - dy_prime)
+
+        # Line corners nearest the second edge point
+        p3 = (x2 - dx_prime, y2 + dy_prime)
+        p4 = (x2 + dx_prime, y2 - dy_prime)
+
+        points = [p1, p2, p3, p4, p1]
+        return [self.create_point_in_line_region_function(points[i:i+2], points) for i in range(4)]
 
     '''
     Helper function for create_line_region_testers(). This function
@@ -327,7 +345,7 @@ def rasterize(
         # Creating our region testers here, since otherwise we we would have to create them
         # on the fly for each pixel.
         triangle_region_testers = TriangleCoverage().create_triangle_region_testers(shape)
-        line_region_testers     = LineCoverage().create_line_region_testers(shape)
+        line_region_testers = LineCoverage().create_line_region_testers(shape)
 
         for x, y in bounding_box(shape):
             x_img, y_img = viewbox_coords_2_img(vb_h, vb_w, im_h, im_w, x,y)
