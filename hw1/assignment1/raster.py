@@ -6,6 +6,7 @@ around (0,0) being in the upper-left hand corner.
 from typing import Optional, Callable, Tuple, List
 import numpy as np
 from numpy.typing import NDArray
+from itertools import product
 from utils import *
 from shapes import Shape, SVG, Triangle, Line, Circle
 
@@ -36,17 +37,25 @@ Args:
     shape : Shape we will be creating a bounding box for.
 
 Return:
-    bb : Upper-left and lower-right corner of our shapes bounding box.
+    bb : Pixels contained in our bounding box
 '''
 def bounding_box(shape: Shape) -> List[List[int]]:
     if shape.type in ["triangle", "line"]:
-        xs = list(map(lambda p: int(p[0]), shape.pts))
-        ys = list(map(lambda p: int(p[1]), shape.pts))
-
         # Remember that the points of our SVG can be fractions,
         # while pixel vales can only be integers, so we need to
         # convert float to int.
-        return ((min(xs), min(ys)), (max(xs), max(ys)))
+        xs = list(map(lambda p: int(p[0]), shape.pts))
+        ys = list(map(lambda p: int(p[1]), shape.pts))
+        
+        # Finding the extreme coordinates of our shape.
+        min_x, max_x = min(xs), max(xs)
+        min_y, max_y = min(ys), max(ys)
+
+        xs_bb = range(min_x, max_x + 1)
+        ys_bb = range(min_y, max_y + 1)
+
+        # Cartesion product of our X and Y values.
+        return list(product(xs_bb, ys_bb))
     
     elif shape.type == "circle":
         # Upper-left because on our pixel-grid, the origin
@@ -56,6 +65,7 @@ def bounding_box(shape: Shape) -> List[List[int]]:
         return (upper_left, upper_left), (lower_right, lower_right)
     else:
         raise ValueError("Unknown shape type.")
+
 
 '''
 The viewbox of our SVG may (and likely does) have different
@@ -102,10 +112,13 @@ Args:
 Return:
     coverage : Fraction of the pixel that lies in our shape.
 '''
-def get_coverage_for_pixel(shape: Shape, x: int, y: int) -> float:
+def get_coverage_for_pixel(shape: Shape, 
+                           x: int, 
+                           y: int, 
+                           triangle_region_testers: Callable[List[float], bool]) -> float:
     
     if shape.type == "triangle":
-        return get_triangle_coverage_for_pixel(shape, x, y)
+        return get_triangle_coverage_for_pixel(shape, x, y, triangle_region_testers)
 
     elif shape.type == "circle":
         pass
@@ -124,21 +137,21 @@ for a given triangle.
 We split each pixel up into 9 points, and check if each of those points
 falls inside our outside the region of the triangle.
 
-Args:
-    triangle : Triangle object we're using as our boundary
-    x        : X-coord of the upper-left corner of our pixel
-    y        : Y-coord of the upper-left corner of our pixel
-
+Args:  
+    triangle       : Triangle object we're using as our boundary
+    x              : X-coord of the upper-left corner of our pixel
+    y              : Y-coord of the upper-left corner of our pixel
+    region_testers : Function for checking if a point is within one of the three "regions" of a triangle
 Return:
     coverage : Fraction of the pixel that is within our shape
 '''
-def get_triangle_coverage_for_pixel(triangle: Triangle, x: int, y: int) -> float: 
+def get_triangle_coverage_for_pixel(triangle: Triangle, x: int, y: int, region_testers: Callable[List[float], bool]) -> float: 
     # Splitting the pixel into 9 evenly spaced sample points.
     xs = [x+0.5*i for i in range(3)]
     ys = [y+0.5*i for i in range(3)]
     # Calculating the Cartesion product of our Xs and Ys
     points = [(x,y) for x in xs for y in ys]
-    num_points_in_triangle = sum(map(lambda p: check_if_point_in_triangle(triangle, p[0], p[1]), points))
+    num_points_in_triangle = sum(map(lambda p: check_if_point_in_triangle(triangle, p[0], p[1], region_testers), points))
 
     return num_points_in_triangle / len(points)
 '''
@@ -146,7 +159,7 @@ Helper function for get_triangle_coverage_of_pixel(). This function checks
 if a specific (x, y) point (not pixel) is within the overlap
 of our three triangle regions.
 '''
-def check_if_point_in_triangle(triangle: Triangle, x: float, y: float) -> bool:
+def check_if_point_in_triangle(triangle: Triangle, x: float, y: float, triangle_region_testers: Callable[List[float], bool]) -> bool:
     triangle_region_testers = create_triangle_region_testers(triangle)
     return all(map(lambda tester: tester((x,y)), triangle_region_testers))
 
@@ -217,6 +230,8 @@ def rasterize(
 
     background_arr = np.array(background)
     shapes: List[Shape] = read_svg(svg_file)
+    vb_h = shapes[0].h  # Viewbox height
+    vb_w = shapes[0].w  # Viewbox width
     img = np.zeros((im_h, im_w, 3))
     img[:, :, :] = background_arr # Initializing the image with a background color
     svg = shapes[0]
@@ -224,10 +239,20 @@ def rasterize(
 
     # the first shape in shapes is always the SVG object with the viewbox sizes
     for shape in shapes[1:]:
-        for x,y in bounding_box(shape):
-            a = get_coverage_for_pixel(shape, x, y)
-            x_img, y_img = viewbox_coords_2_img(x,y)
-            img[x,y] = (1-a)*img[x,y] + shape.color*a 
+
+        # Creating our region testers here, since otherwise we we would have to create them
+        # on the fly for each pixel.
+        triangle_region_testers = create_triangle_region_testers(shape)
+
+        for x, y in bounding_box(shape):
+            x_img, y_img = viewbox_coords_2_img(vb_h, vb_w, im_h, im_w, x,y)
+            a = get_coverage_for_pixel(shape, x, y, triangle_region_testers)
+            img[x_img, y_img] = (1-a)*img[x_img, y_img] + shape.color*a 
+
+    # Rotating the image by 90 degrees,
+    # since our origin shifts from the upper-left to the 
+    # lower-left during our transformations.
+    img = np.rot90(img, k=3)
 
     if output_file:
         save_image(output_file, img)
