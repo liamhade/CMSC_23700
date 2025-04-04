@@ -1,6 +1,8 @@
 '''
 Remember that the coordinates for this program are centered
 around (0,0) being in the upper-left hand corner.
+
+# TODO: Be able to turn of anti-aliasing
 '''
 
 from typing import Optional, Callable, Tuple, List
@@ -113,102 +115,184 @@ Return:
     coverage : Fraction of the pixel that lies in our shape.
 '''
 def get_coverage_for_pixel(shape: Shape, 
-                           x: int, 
-                           y: int, 
-                           triangle_region_testers: Callable[List[float], bool]) -> float:
+                        x: int, 
+                        y: int, 
+                        triangle_region_testers: Callable[List[float], bool],
+                        line_region_testers: Callable[List[float], bool]) -> float:
     
     if shape.type == "triangle":
-        return get_triangle_coverage_for_pixel(shape, x, y, triangle_region_testers)
+        return TriangleCoverage().get_triangle_coverage_for_pixel(shape, x, y, triangle_region_testers)
 
     elif shape.type == "circle":
         pass
 
     elif shape.type == "line":
-        pass
+        return LineCoverage().get_line_coverage_for_pixel(shape, x, y, line_region_testers)
 
     else:
         raise ValueError("not sure what shape was given")
 
-'''
-Helper function for get_coverage_of_pixel(), but with a
-specific application for checking what the coverage of a pixel is
-for a given triangle.
+class LineCoverage():
+    '''
+    Helper function for get_coverage_of_pixel(), but with a
+    specific application for checking what the coverage of a pixel is
+    for a given line.
 
-We split each pixel up into 9 points, and check if each of those points
-falls inside our outside the region of the triangle.
+    We split each pixel up into 9 points, and check if each of those points
+    falls inside our outside the region of the line.
 
-Args:  
-    triangle       : Triangle object we're using as our boundary
-    x              : X-coord of the upper-left corner of our pixel
-    y              : Y-coord of the upper-left corner of our pixel
-    region_testers : Function for checking if a point is within one of the three "regions" of a triangle
-Return:
-    coverage : Fraction of the pixel that is within our shape
-'''
-def get_triangle_coverage_for_pixel(triangle: Triangle, x: int, y: int, region_testers: Callable[List[float], bool]) -> float: 
-    # Splitting the pixel into 9 evenly spaced sample points.
-    xs = [x+0.5*i for i in range(3)]
-    ys = [y+0.5*i for i in range(3)]
-    # Calculating the Cartesion product of our Xs and Ys
-    points = [(x,y) for x in xs for y in ys]
-    num_points_in_triangle = sum(map(lambda p: check_if_point_in_triangle(triangle, p[0], p[1], region_testers), points))
+    Args:  
+        line           : Line object we're using as our boundary
+        x              : X-coord of the upper-left corner of our pixel
+        y              : Y-coord of the upper-left corner of our pixel
+        region_testers : Function for checking if a point is within one of the three "regions" of a triangle
+    Return:
+        coverage : Fraction of the pixel that is within our shape
+    '''
+    def get_line_coverage_for_pixel(self, line: Line, x: int, y: int, region_testers: Callable[List[float], bool]) -> float: 
+        # Splitting the pixel into 9 evenly spaced sample points.
+        xs = [x+0.5*i for i in range(3)]
+        ys = [y+0.5*i for i in range(3)]
+        # Calculating the Cartesion product of our Xs and Ys
+        points = [(x,y) for x in xs for y in ys]
+        num_points_in_line = sum(map(lambda p: self.check_if_point_in_line(line, p[0], p[1], region_testers), points))
 
-    return num_points_in_triangle / len(points)
-'''
-Helper function for get_triangle_coverage_of_pixel(). This function checks
-if a specific (x, y) point (not pixel) is within the overlap
-of our three triangle regions.
-'''
-def check_if_point_in_triangle(triangle: Triangle, x: float, y: float, triangle_region_testers: Callable[List[float], bool]) -> bool:
-    triangle_region_testers = create_triangle_region_testers(triangle)
-    return all(map(lambda tester: tester((x,y)), triangle_region_testers))
+        return num_points_in_line / len(points)
 
-'''
-The bounded region of a triangle can be thought of as the overlap
-between three other regions: the "inside" regions of the three sides
-of the triangle. This function creates three functions, one for testing if
-a point is in each of three "inside" regions.
+    '''
+    Helper function for get_line_coverage_of_pixel(). This function checks
+    if a specific (x, y) point (not pixel) is within the overlap
+    of our four line regions.
+    '''
+    def check_if_point_in_line(self, line: Line, x: float, y: float, line_region_testers: Callable[List[float], bool]) -> bool:
+        return all(map(lambda tester: tester((x,y)), line_region_testers))
 
-Args:
-    triangle : List of 4 points defining our triangle (4, because the last one is redundant) 
+    '''
+    The bounded region of a line with a width (w) can be thought of as the overlap
+    between four regions marcated by the 4 sides of our line. This function creates 
+    four functions, one for testing if a point is in each of the "inside" regions.
 
-Return:
-    region_testers : Three region testers for checking if a point is in each region
-'''
-def create_triangle_region_testers(triangle: Triangle) -> Callable[List[float], bool]:
-    return [create_point_in_triangle_region_function(triangle.pts[i:i+2], triangle.pts) for i in range(3)]
+    Args:
+        line : Line object
 
-'''
-Helper function for create_triangle_region_testers(). This function
-creates a funciton to test if a point is within the region 
-defined by one of the sides of a triangle. When all three
-regions are used in conjuction, we can tell if a point is within
-a triangle.
+    Return:
+        region_testers : Four region testers for checking if a point is in each region
+    '''
+    def create_line_region_testers(self, line: Line) -> Callable[List[float], bool]:
+        # TODO: Figure out what the four poitns of the line are (check your paper)...
+        return None
+        # return [self.create_point_in_line_region_function(line.pts[i:i+2], line.pts) for i in range(3)]
 
-We need the rest of the points (other_points) in addition to our line
-so that we know which side of the triangle is "within" the region.
+    '''
+    Helper function for create_line_region_testers(). This function
+    creates a funciton to test if a point is within the region 
+    defined by one of the sides of a line.
 
-Note: this function has undefined behavaior if all three points of the triangle are in a line.
+    We need the rest of the points (other_points) in addition to our line
+    so that we know which side of the line is "within" the region.
 
-Args:
-    line [(x1, y1), (x2, y2)] : Pair of points defining the line / side of triangle
-    triangle_points           : All the points of the triangle.
+    Args:
+        line         : Pair of points defining an edge of our "line" object
+        line_points  : All four  points of the line
 
-Return:
-    region_tester (List[float] -> bool) : Function that tests if a point is inside the line region
-'''
-def create_point_in_triangle_region_function(line: NDArray[NDArray[float]], triangle_points: NDArray[NDArray[float]]) -> Callable[NDArray[float], bool]:
-    p1, p2 = line
-    for x, y in filter(lambda p: ~(p == line).all(axis=1).any(), triangle_points):
-        # Triangle point is above the line region,
-        # so our "inside" region will be above the line to.
-        if line_y(p1, p2, x) < y:
-            return lambda p: line_y(p1, p2, p[0]) < p[1]
-        # "Inside" region is below the line.
-        else:
-            return lambda p: line_y(p1, p2, p[0]) >= p[1]
+    Return:
+        region_tester (List[float] -> bool) : Function that tests if a point is inside the line region
+    '''
+    def create_point_in_line_region_function(self, line: NDArray[NDArray[float]], line_points: NDArray[NDArray[float]]) -> Callable[NDArray[float], bool]:
+        p1, p2 = line
+        for x, y in filter(lambda p: ~(p == line).all(axis=1).any(), line_points):
+            # Triangle point is above the line region,
+            # so our "inside" region will be above the line to.
+            if line_y(p1, p2, x) < y:
+                return lambda p: line_y(p1, p2, p[0]) < p[1]
+            # "Inside" region is below the line.
+            else:
+                return lambda p: line_y(p1, p2, p[0]) >= p[1]
+        
+        raise ValueError("No (x, y) to iterate over")
+
+
+class TriangleCoverage:
+    '''
+    Helper function for get_coverage_of_pixel(), but with a
+    specific application for checking what the coverage of a pixel is
+    for a given triangle.
+
+    We split each pixel up into 9 points, and check if each of those points
+    falls inside our outside the region of the triangle.
+
+    Args:  
+        triangle       : Triangle object we're using as our boundary
+        x              : X-coord of the upper-left corner of our pixel
+        y              : Y-coord of the upper-left corner of our pixel
+        region_testers : Function for checking if a point is within one of the three "regions" of a triangle
+    Return:
+        coverage : Fraction of the pixel that is within our shape
+    '''
+    def get_triangle_coverage_for_pixel(self, triangle: Triangle, x: int, y: int, region_testers: Callable[List[float], bool]) -> float: 
+        # Splitting the pixel into 9 evenly spaced sample points.
+        xs = [x+0.5*i for i in range(3)]
+        ys = [y+0.5*i for i in range(3)]
+        # Calculating the Cartesion product of our Xs and Ys
+        points = [(x,y) for x in xs for y in ys]
+        num_points_in_triangle = sum(map(lambda p: self.check_if_point_in_triangle(triangle, p[0], p[1], region_testers), points))
+
+        return num_points_in_triangle / len(points)
     
-    raise ValueError("No (x, y) to iterate over")
+    '''
+    Helper function for get_triangle_coverage_of_pixel(). This function checks
+    if a specific (x, y) point (not pixel) is within the overlap
+    of our three triangle regions.
+    '''
+    def check_if_point_in_triangle(self, triangle: Triangle, x: float, y: float, triangle_region_testers: Callable[List[float], bool]) -> bool:
+        return all(map(lambda tester: tester((x,y)), triangle_region_testers))
+
+    '''
+    The bounded region of a triangle can be thought of as the overlap
+    between three other regions: the "inside" regions of the three sides
+    of the triangle. This function creates three functions, one for testing if
+    a point is in each of three "inside" regions.
+
+    Args:
+        triangle : List of 4 points defining our triangle (4, because the last one is redundant) 
+
+    Return:
+        region_testers : Three region testers for checking if a point is in each region
+    '''
+    def create_triangle_region_testers(self, triangle: Triangle) -> Callable[List[float], bool]:
+        return [self.create_point_in_triangle_region_function(triangle.pts[i:i+2], triangle.pts) for i in range(3)]
+
+    '''
+    Helper function for create_triangle_region_testers(). This function
+    creates a funciton to test if a point is within the region 
+    defined by one of the sides of a triangle. When all three
+    regions are used in conjuction, we can tell if a point is within
+    a triangle.
+
+    We need the rest of the points (other_points) in addition to our line
+    so that we know which side of the triangle is "within" the region.
+
+    Note: this function has undefined behavaior if all three points of the triangle are in a line.
+
+    Args:
+        line [(x1, y1), (x2, y2)] : Pair of points defining the line / side of triangle
+        triangle_points           : All the points of the triangle.
+
+    Return:
+        region_tester (List[float] -> bool) : Function that tests if a point is inside the line region
+    '''
+    def create_point_in_triangle_region_function(self, line: NDArray[NDArray[float]], triangle_points: NDArray[NDArray[float]]) -> Callable[NDArray[float], bool]:
+        p1, p2 = line
+        for x, y in filter(lambda p: ~(p == line).all(axis=1).any(), triangle_points):
+            # Triangle point is above the line region,
+            # so our "inside" region will be above the line to.
+            if line_y(p1, p2, x) < y:
+                return lambda p: line_y(p1, p2, p[0]) < p[1]
+            # "Inside" region is below the line.
+            else:
+                return lambda p: line_y(p1, p2, p[0]) >= p[1]
+        
+        raise ValueError("No (x, y) to iterate over")
 
 def rasterize(
     svg_file: str,
@@ -242,11 +326,12 @@ def rasterize(
 
         # Creating our region testers here, since otherwise we we would have to create them
         # on the fly for each pixel.
-        triangle_region_testers = create_triangle_region_testers(shape)
+        triangle_region_testers = TriangleCoverage().create_triangle_region_testers(shape)
+        line_region_testers     = LineCoverage().create_line_region_testers(shape)
 
         for x, y in bounding_box(shape):
             x_img, y_img = viewbox_coords_2_img(vb_h, vb_w, im_h, im_w, x,y)
-            a = get_coverage_for_pixel(shape, x, y, triangle_region_testers)
+            a = get_coverage_for_pixel(shape, x, y, triangle_region_testers, line_region_testers)
             img[x_img, y_img] = (1-a)*img[x_img, y_img] + shape.color*a 
 
     # Rotating the image by 90 degrees,
