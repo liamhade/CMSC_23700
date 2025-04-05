@@ -41,6 +41,7 @@ Args:
 Return:
     bb : Pixels contained in our bounding box
 '''
+# TODO: Make sure this works with the new viewbox_2_img_function
 def bounding_box(viewbox_h: int, viewbox_w: int, shape: Shape) -> List[List[int]]:
     if shape.type in ["triangle", "line"]:
         if shape.type == "triangle":
@@ -79,8 +80,8 @@ def bounding_box(viewbox_h: int, viewbox_w: int, shape: Shape) -> List[List[int]
 
 '''
 When translating between coordinates in our viewbox and our image,
-we need to apply a scale and padding / shift to each coordinate
-such that the geometry maintains constant between viewbox and image.
+we need to apply a scale to each coordinate axis such that the geometry 
+maintains constant between viewbox and image.
 
 Args:
     viewbox_h : Viewbox height
@@ -89,30 +90,17 @@ Args:
     img_w     : Image width
 
 Return:
-    (scale, x_pad, y_pad) : Scale and x/y padding to apply to our coordinates.
+    (x_scale, y_scale) : X and y-scaling that we'll multiply the viewbox
+                         coordinates by get our image and (x, y) points.
 '''
-def viewbox_2_img_scale_and_padding(viewbox_h: int, 
-                                    viewbox_w: int, 
-                                    img_h    : int, 
-                                    img_w    : int) -> Tuple[float]:
-    # Calculating aspected rations for viewbox and image
-    vb_ratio  = viewbox_w / viewbox_h
-    img_ratio = img_w / img_h
+def viewbox_2_img_scales(viewbox_h: int, 
+                         viewbox_w: int, 
+                         img_h    : int, 
+                         img_w    : int) -> Tuple[float]:
+    x_scale = img_w / viewbox_w
+    y_scale = img_h / viewbox_h
 
-    # Image is wider than the viewbox 
-    if img_ratio > vb_ratio:
-        # Need to pad our x-values to keep everything centered
-        scale = img_h / viewbox_h
-        pad_x = (img_w - viewbox_w * scale) / 2
-        pad_y = 0
-    # Image (might be) taller than viewbox
-    else:
-        # Need to pad our y-values to keep everything centered
-        scale = img_w / viewbox_w
-        pad_x = 0
-        pad_y = (img_h - viewbox_h * scale) / 2
-    
-    return (scale, pad_x, pad_y)
+    return (x_scale, y_scale)
 
 '''
 The viewbox of our SVG may (and likely does) have different
@@ -140,9 +128,9 @@ def viewbox_coords_2_img(viewbox_h: int,
                          img_w    : int, 
                          x        : int,
                          y        : int) -> Tuple[int]:
-    scale, pad_x, pad_y = viewbox_2_img_scale_and_padding(viewbox_h, viewbox_w, img_h, img_w)    
-    x_img = int(x * scale + pad_x)
-    y_img = int(y * scale + pad_y)
+    scale_x, scale_y = viewbox_2_img_scales(viewbox_h, viewbox_w, img_h, img_w)    
+    x_img = int(x * scale_x)
+    y_img = int(y * scale_y)
 
     return (x_img, y_img)
 
@@ -169,13 +157,14 @@ def get_coverage_for_pixel(shape: Shape,
                         y: int, 
                         antialias: bool,
                         triangle_region_testers: Callable[List[float], bool],
-                        line_region_testers: Callable[List[float], bool]) -> float:
+                        line_region_testers: Callable[List[float], bool],
+                        circle_region_tester: Callable[List[float], bool]) -> float:
     
     if shape.type == "triangle":
         return TriangleCoverage().get_triangle_coverage_for_pixel(x, y, antialias, triangle_region_testers)
 
     elif shape.type == "circle":
-        return CircleCoverage().get_line_coverage_for_circle(shape, x, y, antialias)
+        return CircleCoverage().get_line_coverage_for_circle(x, y, antialias, circle_region_tester)
 
     elif shape.type == "line":
         return LineCoverage().get_line_coverage_for_pixel(x, y, antialias, line_region_testers)
@@ -193,17 +182,16 @@ class CircleCoverage():
     falls inside our outside the region of the line.
 
     Args:  
-        circle    : Circle() object 
-        x         : X-coord of the upper-left corner of our pixel
-        y         : Y-coord of the upper-left corner of our pixel
-        antialias : Whether we want to apply anti-aliasing to our image generation
+        circle        : Circle() object with added "a" and "b" parameters for ellipse conversion.
+        x             : X-coord of the upper-left corner of our pixel
+        y             : Y-coord of the upper-left corner of our pixel
+        antialias     : Whether we want to apply anti-aliasing to our image generation
+        region_tester : Function that checks whether a point lies within our viewbox-to-image
+                        transformed circle / ellipse
     Return:
         coverage : Fraction of the pixel that is within our shape
     '''
-    def get_line_coverage_for_circle(self, circle: Circle, x: int, y: int, antialias: bool) -> float: 
-        r = circle.radius
-        x_offset, y_offset = circle.center
-
+    def get_line_coverage_for_circle(self, x: int, y: int, antialias: bool, region_tester: Callable[List[float], bool]) -> float: 
         if antialias:
             # Splitting the pixel into 9 evenly spaced sample points.
             xs = [x+0.5*i for i in range(3)]
@@ -211,12 +199,27 @@ class CircleCoverage():
 
             # Calculating the Cartesion product of our Xs and Ys
             points = list(product(xs, ys))
-            num_points_in_line = sum([self.check_if_point_in_circle(x, y, x_offset, y_offset, r) for (x,y) in points])
+            num_points_in_line = sum([region_tester(p) for p in points])
 
             return num_points_in_line / len(points)
         else:
             # Checking if the upper-left corner of our pixel is contained in the region
-            return float(self.check_if_point_in_circle(x, y, x_offset, y_offset, r))
+            return float(region_tester((x, y)))
+
+    '''
+    This function creates a function for testing if an (x,y) point falls
+    inside of a circle / ellipse.
+
+    Args:
+        circle : Circle object with added ellipse parameters (a and b) for if
+                the aspect ratio of the image is changed
+    
+    Return:
+        region_tester : Function that determines if a point lies within our ellipse.
+    '''
+    def create_circle_region_tester(self, circle: Circle) -> Callable[List[float], bool]:
+        # p as has type [float, float]
+        return lambda p: self.check_if_point_in_ellipse(p[0], p[1], circle.center[0], circle.center[1], circle.a, circle.b, circle.radius)
 
     '''
     Given a circle defined by a radius, and x and y-offset, we want to check if
@@ -227,14 +230,16 @@ class CircleCoverage():
         y        : Y-value for the point we're checking
         x_offset : X-value offset for the circle
         y_offset : Y-value offset for the circle
+        a        : X-axis stretch value
+        b        : Y-axis stretch value
         r        : Circle radius
     
     Return:
         in_circle (bool) : Boolean representing whether a point is inside the circle.
                            On the edge counts as in. 
     '''
-    def check_if_point_in_circle(self, x: float, y: float, x_offset: float, y_offset: float, r: float) -> bool:
-        return (x - x_offset)**2 + (y - y_offset)**2 <= r**2
+    def check_if_point_in_ellipse(self, x: float, y: float, x_offset: float, y_offset: float, a: float, b: float, r: float) -> bool:
+        return ((x - x_offset)**2 / a**2) + ((y - y_offset)**2 / b**2) <= r**2
 
 class LineCoverage():
     '''
@@ -455,6 +460,10 @@ The first step for in this graphics pipeline is to transform the
 viewbox coordinates into image coordinates. Thus, we need to make sure
 that the points and lengths decribed by our shapes are appropriate
 for the given transformation.
+
+These functions are also used as helper functions for the 
+create_<shape>_region_testers() functions, so keep that in mind
+when editing them.
 '''
 class Scale:
     def __init__(self, viewbox_h: int, viewbox_w: int, img_h: int, img_w: int):
@@ -472,24 +481,28 @@ class Scale:
         return triangle
     
     '''
-    Scales and pads the two defining points of the line, and also
-    scales the width of the line.
+    Scales the two defining edge points of the line. Note that the width is not scaled here,
+    but we only need the width to the find the corners of our line. Thus, we first find the corners
+    of the line in the viewbox, then scale those to fit into our image.
     '''
     def scale_line(self, line: Line):
         scaled_points = [viewbox_coords_2_img(self.viewbox_h, self.viewbox_w, self.img_h, self.img_w, x, y) for (x, y) in line.pts]
-        scaled_width  = line.width * viewbox_2_img_scale_and_padding(self.viewbox_h, self.viewbox_w, self.img_h, self.img_w)[0]
         line.pts   = np.array(scaled_points)
-        line.width = scaled_width
+        
         return line
 
     '''
-    Scales and pads the center point of the circle, and scales
-    the radius.
+    Scales the circle so that the circle_region_tester function runs correctly.
     '''
     def scale_circle(self, circle: Circle):
-        scaled_center = viewbox_coords_2_img(self.viewbox_h, self.viewbox_w, self.img_h, self.img_w, circle.center[0], circle.center[1])
-        circle.radius = circle.radius * viewbox_2_img_scale_and_padding(self.viewbox_h, self.viewbox_w, self.img_h, self.img_w)[0]
+        x_scale, y_scale = viewbox_2_img_scales(self.viewbox_h, self.viewbox_w, self.img_h, self.img_w)
+        # Shifting the center over so it matches the image coordinates
+        scaled_center = (circle.center[0]*x_scale, circle.center[1]*y_scale)
         circle.center = np.array(scaled_center)
+        # Adding "a" and "b" values to stretch our circle if it needs to become an ellipse.
+        # Since we have these values, we don't need to change our radius.
+        circle.a = x_scale
+        circle.b = y_scale        
         return circle
 
 def rasterize(
@@ -521,26 +534,33 @@ def rasterize(
 
     # the first shape in shapes is always the SVG object with the viewbox sizes
     for shape in shapes[1:]:
+
         shape_scaler = Scale(vb_h, vb_w, im_h, im_w)
         # Creating our region testers here, since otherwise we we would have to create them
         # on the fly for each pixel.
         if shape.type == "triangle":
-            shape = shape_scaler.scale_triangle(shape)
-            triangle_region_testers = TriangleCoverage().create_triangle_region_testers(shape)
-            line_region_testers = []
+            # We convert the shape here so that the bounding box is made correctly.
+            img_shape = shape_scaler.scale_triangle(shape)
+            triangle_region_testers = TriangleCoverage().create_triangle_region_testers(img_shape)
+            line_region_testers     = []
+            circle_region_tester    = None
 
         elif shape.type == "line":
-            shape = shape_scaler.scale_line(shape)
+            img_shape = shape_scaler.scale_line(shape)
             triangle_region_testers = []
-            line_region_testers = LineCoverage().create_line_region_testers(shape)
+            line_region_testers     = LineCoverage().create_line_region_testers(img_shape)
+            circle_region_tester    = []
         
         elif shape.type == "circle":
-            shape = shape_scaler.scale_circle(shape)
+            img_shape = shape_scaler.scale_circle(shape)
+            img_shape = shape_scaler.add_ellipse_coefficients(img_shape)
             triangle_region_testers = []
-            line_region_testers = []
+            line_region_testers     = []
+            circle_region_tester    = CircleCoverage().create_circle_region_tester(shape)
 
-        for x, y in bounding_box(im_h, im_w, shape):
-            a = get_coverage_for_pixel(shape, x, y, antialias, triangle_region_testers, line_region_testers)
+        for x, y in bounding_box(vb_h, vb_w, shape):
+            x_img, y_img = viewbox_coords_2_img(vb_h, vb_w, im_h, im_w, x, y)
+            a = get_coverage_for_pixel(shape, x_img, y_img, antialias, triangle_region_testers, line_region_testers, circle_region_tester)
             img[y, x] = (1-a)*img[y, x] + shape.color*a 
 
     if output_file:
