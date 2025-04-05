@@ -81,6 +81,43 @@ def bounding_box(viewbox_h: int, viewbox_w: int, shape: Shape) -> List[List[int]
     return list(product(xs_bb, ys_bb))
 
 '''
+When translating between coordinates in our viewbox and our image,
+we need to apply a scale and padding / shift to each coordinate
+such that the geometry maintains constant between viewbox and image.
+
+Args:
+    viewbox_h : Viewbox height
+    viewbox_w : Viewbox width
+    img_h     : Image height
+    img_w     : Image width
+
+Return:
+    (scale, x_pad, y_pad) : Scale and x/y padding to apply to our coordinates.
+'''
+def viewbox_2_img_scale_and_padding(viewbox_h: int, 
+                                    viewbox_w: int, 
+                                    img_h    : int, 
+                                    img_w    : int) -> Tuple[float]:
+    # Calculating aspected rations for viewbox and image
+    vb_ratio  = viewbox_w / viewbox_h
+    img_ratio = img_w / img_h
+
+    # Image is wider than the viewbox 
+    if img_ratio > vb_ratio:
+        # Need to pad our x-values to keep everything centered
+        scale = img_h / viewbox_h
+        pad_x = (img_w - viewbox_w * scale) / 2
+        pad_y = 0
+    # Image (might be) taller than viewbox
+    else:
+        # Need to pad our y-values to keep everything centered
+        scale = img_w / viewbox_w
+        pad_x = 0
+        pad_y = (img_h - viewbox_h * scale) / 2
+    
+    return (scale, pad_x, pad_y)
+
+'''
 The viewbox of our SVG may (and likely does) have different
 dimension then the final dimensions of our image. Thus,
 we need to convert the (x, y) pixel coordinates of our viewbox
@@ -106,25 +143,7 @@ def viewbox_coords_2_img(viewbox_h: int,
                          img_w    : int, 
                          x        : int,
                          y        : int) -> Tuple[int]:
-    
-    # Calculating aspected rations for viewbox and image
-    vb_ratio  = viewbox_w / viewbox_h
-    img_ratio = img_w / img_h
-
-    # Image is wider than the viewbox 
-    if img_ratio > vb_ratio:
-        # Need to pad our x-values to keep everything centered
-        scale = img_h / viewbox_h
-        pad_x = (img_w - viewbox_w * scale) / 2
-        pad_y = 0
-    # Image (might be) taller than viewbox
-    else:
-        # Need to pad our y-values to keep everything centered
-        scale = img_w / viewbox_w
-        pad_x = 0
-        pad_y = (img_h - viewbox_h * scale) / 2
-
-    # Maintaining a uniform scale
+    scale, pad_x, pad_y = viewbox_2_img_scale_and_padding(viewbox_h, viewbox_w, img_h, img_w)    
     x_img = int(x * scale + pad_x)
     y_img = int(y * scale + pad_y)
 
@@ -464,23 +483,43 @@ def rasterize(
 
     # the first shape in shapes is always the SVG object with the viewbox sizes
     for shape in shapes[1:]:
+        
         # Creating our region testers here, since otherwise we we would have to create them
         # on the fly for each pixel.
         if shape.type == "triangle":
+            # TODO: Move this out into a function
+            # Converting triangle coordinates from viewbox to image coords.
+            scaled_points = [viewbox_coords_2_img(vb_h, vb_w, im_h, im_w, x, y) for (x, y) in shape.pts]
+            shape.pts = np.array(scaled_points)
+
             triangle_region_testers = TriangleCoverage().create_triangle_region_testers(shape)
             line_region_testers = []
+
         elif shape.type == "line":
+            # TODO: Move this out into a function
+            # Converting triangle coordinates from viewbox to image coords.
+            scaled_points = [viewbox_coords_2_img(vb_h, vb_w, im_h, im_w, x, y) for (x, y) in shape.pts]
+            scaled_width  = shape.width * viewbox_2_img_scale_and_padding(vb_h, vb_w, im_h, im_w)[0]
+            shape.pts   = np.array(scaled_points)
+            shape.width = scaled_width
+
             triangle_region_testers = []
             line_region_testers = LineCoverage().create_line_region_testers(shape)
-        else:
+        
+        elif shape.type == "circle":
+
+            scaled_center = viewbox_coords_2_img(vb_h, vb_w, im_h, im_w, shape.center[0], shape.center[1])
+            scaled_radius = shape.radius * viewbox_2_img_scale_and_padding(vb_h, vb_w, im_h, im_w)[0]
+            shape.center = np.array(scaled_center)
+            shape.radius = scaled_radius
+
             triangle_region_testers = []
             line_region_testers = []
 
         # print(shape)
-        for x, y in bounding_box(vb_h, vb_w, shape):
+        for x, y in bounding_box(im_h, im_w, shape):
             a = get_coverage_for_pixel(shape, x, y, antialias, triangle_region_testers, line_region_testers)
-            x_img, y_img = viewbox_coords_2_img(vb_h, vb_w, im_h, im_w, x, y)
-            img[y_img, x_img] = (1-a)*img[y_img, x_img] + shape.color*a 
+            img[y, x] = (1-a)*img[y, x] + shape.color*a 
 
     # Rotating the image by 90 degrees,
     # since our origin shifts from the upper-left to the 
@@ -498,4 +537,4 @@ if __name__ == "__main__":
     # rasterize("tests/test1.svg", 128, 128, output_file="your_output.png", antialias=True)
 
     # Line test
-    rasterize("tests/custom.svg", 128, 128, output_file="your_output.png", antialias=True)
+    rasterize("tests/test6.svg", 128, 128, output_file="your_output.png", antialias=True)
