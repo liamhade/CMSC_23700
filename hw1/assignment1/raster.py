@@ -120,17 +120,17 @@ Args:
     y         : Y-coord for the viewbox pixel
 
 Return:
-    (x', y') : Translated coordinates for the image pixel    
+    (x', y') : Translated coordinates for the image point   
 '''
-def viewbox_coords_2_img(viewbox_h: int, 
-                         viewbox_w: int, 
-                         img_h    : int, 
-                         img_w    : int, 
-                         x        : int,
-                         y        : int) -> Tuple[int]:
+def viewbox_coords_2_img_point(viewbox_h: int, 
+                               viewbox_w: int, 
+                               img_h    : int, 
+                               img_w    : int, 
+                               x        : int,
+                               y        : int) -> Tuple[int]:
     scale_x, scale_y = viewbox_2_img_scales(viewbox_h, viewbox_w, img_h, img_w)    
-    x_img = int(x * scale_x)
-    y_img = int(y * scale_y)
+    x_img = x * scale_x
+    y_img = y * scale_y
 
     return (x_img, y_img)
 
@@ -211,15 +211,17 @@ class CircleCoverage():
     inside of a circle / ellipse.
 
     Args:
-        circle : Circle object with added ellipse parameters (a and b) for if
-                the aspect ratio of the image is changed
+        center : Center point of the circle
+        radius : Radius of the circle
+        a      : X-axis scaler
+        b      : Y-axis scaler
     
     Return:
         region_tester : Function that determines if a point lies within our ellipse.
     '''
-    def create_circle_region_tester(self, circle: Circle) -> Callable[List[float], bool]:
+    def create_circle_region_tester(self, center: NDArray[float], radius: float, a: float, b: float) -> Callable[List[float], bool]:
         # p as has type [float, float]
-        return lambda p: self.check_if_point_in_ellipse(p[0], p[1], circle.center[0], circle.center[1], circle.a, circle.b, circle.radius)
+        return lambda p: self.check_if_point_in_ellipse(p[0], p[1], center[0], center[1], a, b, radius)
 
     '''
     Given a circle defined by a radius, and x and y-offset, we want to check if
@@ -293,7 +295,7 @@ class LineCoverage():
     Return:
         corners : Set of four (x,y) coordinates for each corner of the line.
     '''
-    def get_line_corners(self, line: Line) -> List[List[float]]:
+    def get_line_corners(self, line: Line) -> NDArray[NDArray[float]]:
         (x1, y1), (x2, y2) = line.pts
         dy, dx = y2-y1, x2-x1
         # Angle of our line
@@ -326,17 +328,16 @@ class LineCoverage():
     four functions, one for testing if a point is in each of the "inside" regions.
 
     Args:
-        line : Line object
+        line_corners : Numpy array of 4 points representing the 4 corners of our line. 
 
     Return:
         region_testers : Four region testers for checking if a point is in each region
     '''
-    def create_line_region_testers(self, line: Line) -> Callable[List[float], bool]:
-        points = self.get_line_corners(line)
+    def create_line_region_testers(self, line_corners: NDArray[NDArray[float]]) -> Callable[List[float], bool]:
         # Adding the start point to the end for ease of computing
         # the final boundary edge of our line.
-        points = np.append(arr=points, values=[points[0]], axis=0)
-        return [self.create_point_in_line_region_function(points[i:i+2], points) for i in range(4)]
+        line_corners = np.append(arr=line_corners, values=[line_corners[0]], axis=0)
+        return [self.create_point_in_line_region_function(line_corners[i:i+2], line_corners) for i in range(4)]
 
     '''
     Helper function for create_line_region_testers(). This function
@@ -414,14 +415,13 @@ class TriangleCoverage:
     a point is in each of three "inside" regions.
 
     Args:
-        triangle : List of 4 points defining our triangle (4, because the last one is redundant) 
+        triangle_pts : List of 4 points defining our triangle (4, because the last one is redundant) 
 
     Return:
         region_testers : Three region testers for checking if a point is in each region
     '''
-    def create_triangle_region_testers(self, triangle: Triangle) -> Callable[List[float], bool]:
-        if triangle.type != "triangle": return [] # TODO: rework the code so you don't have to do this
-        return [self.create_point_in_triangle_region_function(triangle.pts[i:i+2], triangle.pts) for i in range(3)]
+    def create_triangle_region_testers(self, triangle_pts: List[float]) -> Callable[List[float], bool]:
+        return [self.create_point_in_triangle_region_function(triangle_pts[i:i+2], triangle_pts) for i in range(3)]
 
     '''
     Helper function for create_triangle_region_testers(). This function
@@ -471,14 +471,13 @@ class Scale:
         self.viewbox_w = viewbox_w
         self.img_h = img_h
         self.img_w = img_w
-
+    
     '''
-    Scales and pads the three defining points of the triangle.
+    Applys the viewbox__coord2_image
     '''
-    def scale_triangle(self, triangle: Triangle):   
-        scaled_points = [viewbox_coords_2_img(self.viewbox_h, self.viewbox_w, self.img_h, self.img_w, x, y) for (x, y) in triangle.pts]
-        triangle.pts = np.array(scaled_points)
-        return triangle
+    def scale_points(self, points: List[List[float]]) -> NDArray[NDArray[float]]:
+        scaled_points = [viewbox_coords_2_img_point(self.viewbox_h, self.viewbox_w, self.img_h, self.img_w, x, y) for (x, y) in points]
+        return np.array(scaled_points)
     
     '''
     Scales the two defining edge points of the line. Note that the width is not scaled here,
@@ -486,9 +485,8 @@ class Scale:
     of the line in the viewbox, then scale those to fit into our image.
     '''
     def scale_line(self, line: Line):
-        scaled_points = [viewbox_coords_2_img(self.viewbox_h, self.viewbox_w, self.img_h, self.img_w, x, y) for (x, y) in line.pts]
-        line.pts   = np.array(scaled_points)
-        
+        # scaled_points = [viewbox_coords_2_img(self.viewbox_h, self.viewbox_w, self.img_h, self.img_w, x, y) for (x, y) in line.pts]
+        # line.pts      = np.array(scaled_points)
         return line
 
     '''
@@ -530,38 +528,50 @@ def rasterize(
     img = np.zeros((im_h, im_w, 3))
     img[:, :, :] = background_arr # Initializing the image with a background color
     svg = shapes[0]
+
     assert isinstance(svg, SVG)
 
     # the first shape in shapes is always the SVG object with the viewbox sizes
     for shape in shapes[1:]:
 
         shape_scaler = Scale(vb_h, vb_w, im_h, im_w)
+
         # Creating our region testers here, since otherwise we we would have to create them
         # on the fly for each pixel.
         if shape.type == "triangle":
             # We convert the shape here so that the bounding box is made correctly.
-            img_shape = shape_scaler.scale_triangle(shape)
-            triangle_region_testers = TriangleCoverage().create_triangle_region_testers(img_shape)
+            triangle_region_testers = TriangleCoverage().create_triangle_region_testers(shape_scaler.scale_points(shape.pts))
             line_region_testers     = []
             circle_region_tester    = None
 
-        elif shape.type == "line":
-            img_shape = shape_scaler.scale_line(shape)
+        elif shape.type == "line":            
             triangle_region_testers = []
-            line_region_testers     = LineCoverage().create_line_region_testers(img_shape)
-            circle_region_tester    = []
+
+            line_corners             = LineCoverage().get_line_corners(shape)
+            transformed_line_corners = shape_scaler.scale_points(line_corners)
+            line_region_testers      = LineCoverage().create_line_region_testers(transformed_line_corners)
+            
+            circle_region_tester     = []
         
         elif shape.type == "circle":
-            img_shape = shape_scaler.scale_circle(shape)
-            img_shape = shape_scaler.add_ellipse_coefficients(img_shape)
             triangle_region_testers = []
             line_region_testers     = []
-            circle_region_tester    = CircleCoverage().create_circle_region_tester(shape)
 
+            # Ellipse coefficients
+            a, b = viewbox_2_img_scales(vb_h, vb_w, im_h, im_w)
+            cx, cy = shape.center
+            shifted_center = viewbox_coords_2_img_point(vb_h, vb_w, im_h, im_w, cx, cy)
+            circle_region_tester = CircleCoverage().create_circle_region_tester(shifted_center, shape.radius, a, b)
+
+        # Using original shape (not img_shape) for our bounding box
+        # because it makes the calculations easier. We then convert the
+        # viewbox coordinates to image coordinates after getting the bound-box point.
         for x, y in bounding_box(vb_h, vb_w, shape):
-            x_img, y_img = viewbox_coords_2_img(vb_h, vb_w, im_h, im_w, x, y)
+            x_img, y_img = viewbox_coords_2_img_point(vb_h, vb_w, im_h, im_w, x, y)
+            # Converting to integers, since the image points might be floats.
+            x_img, y_img = int(x_img), int(y_img)
             a = get_coverage_for_pixel(shape, x_img, y_img, antialias, triangle_region_testers, line_region_testers, circle_region_tester)
-            img[y, x] = (1-a)*img[y, x] + shape.color*a 
+            img[y_img, x_img] = (1-a)*img[y_img, x_img] + shape.color*a 
 
     if output_file:
         save_image(output_file, img)
@@ -569,4 +579,4 @@ def rasterize(
     return img
 
 if __name__ == "__main__":
-    rasterize("tests/test5.svg", 128, 256, output_file="your_output.png", antialias=True)
+    rasterize("tests/test5.svg", 16, 16, output_file="your_output.png", antialias=True)
