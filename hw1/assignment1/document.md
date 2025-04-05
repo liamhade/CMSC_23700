@@ -1,0 +1,1 @@
+Realized that I wasn't calculating the transformation between viewbox and image coordinates correctly.

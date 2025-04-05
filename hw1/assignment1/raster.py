@@ -102,8 +102,28 @@ def viewbox_coords_2_img(viewbox_h: int,
                          img_w    : int, 
                          x        : int,
                          y        : int) -> Tuple[int]:
-    x_img = int(x * (img_w / viewbox_w))
-    y_img = int(y * (img_h / viewbox_h))
+    
+    # Calculating aspected rations for viewbox and image
+    vb_ratio  = viewbox_w / viewbox_h
+    img_ratio = img_w / img_h
+
+    # Image is wider than the viewbox 
+    if img_ratio > vb_ratio:
+        # Need to pad our x-values to keep everything centered
+        scale = img_h / viewbox_h
+        pad_x = (img_w - viewbox_w * scale) / 2
+        pad_y = 0
+    # Image (might be) taller than viewbox
+    else:
+        # Need to pad our y-values to keep everything centered
+        scale = img_w / viewbox_w
+        pad_x = 0
+        pad_y = (img_h - viewbox_h * scale) / 2
+
+    # Maintaining a uniform scale
+    x_img = int(x * scale + pad_x)
+    y_img = int(y * scale + pad_y)
+
     return (x_img, y_img)
 
 '''
@@ -114,9 +134,12 @@ comes in handy. A pixel that has 50% coverage means that half of it
 lies insides the shape.
 
 Args:
-    shape : Shape that we're testing the coverage for
-    x     : X-coordinate of our pixel
-    y     : Y-coordinate of our pixel 
+    shape     : Shape that we're testing the coverage for
+    x         : X-coordinate of our pixel
+    y         : Y-coordinate of our pixel 
+    antialias : Whether to apply anti-aliasing to our coverage
+    triange_region_testers : List of functions for checking if a point is inside our triangle
+    line_region_testers    : List of functions for checking if a point is inside our line 
 
 Return:
     coverage : Fraction of the pixel that lies in our shape.
@@ -124,17 +147,18 @@ Return:
 def get_coverage_for_pixel(shape: Shape, 
                         x: int, 
                         y: int, 
+                        antialias: bool,
                         triangle_region_testers: Callable[List[float], bool],
                         line_region_testers: Callable[List[float], bool]) -> float:
     
     if shape.type == "triangle":
-        return TriangleCoverage().get_triangle_coverage_for_pixel(shape, x, y, triangle_region_testers)
+        return TriangleCoverage().get_triangle_coverage_for_pixel(x, y, antialias, triangle_region_testers)
 
     elif shape.type == "circle":
         pass
 
     elif shape.type == "line":
-        return LineCoverage().get_line_coverage_for_pixel(shape, x, y, line_region_testers)
+        return LineCoverage().get_line_coverage_for_pixel(x, y, antialias, line_region_testers)
 
     else:
         raise ValueError("not sure what shape was given")
@@ -149,29 +173,35 @@ class LineCoverage():
     falls inside our outside the region of the line.
 
     Args:  
-        line           : Line object we're using as our boundary
         x              : X-coord of the upper-left corner of our pixel
         y              : Y-coord of the upper-left corner of our pixel
+        antialias      : Whether we want to apply anti-aliasing to our image generation
         region_testers : Function for checking if a point is within one of the three "regions" of a triangle
     Return:
         coverage : Fraction of the pixel that is within our shape
     '''
-    def get_line_coverage_for_pixel(self, line: Line, x: int, y: int, region_testers: Callable[List[float], bool]) -> float: 
-        # Splitting the pixel into 9 evenly spaced sample points.
-        xs = [x+0.5*i for i in range(3)]
-        ys = [y+0.5*i for i in range(3)]
-        # Calculating the Cartesion product of our Xs and Ys
-        points = [(x,y) for x in xs for y in ys]
-        num_points_in_line = sum(map(lambda p: self.check_if_point_in_line(line, p[0], p[1], region_testers), points))
+    def get_line_coverage_for_pixel(self, x: int, y: int, antialias: bool, region_testers: Callable[List[float], bool]) -> float: 
+        if antialias:
+            # Splitting the pixel into 9 evenly spaced sample points.
+            xs = [x+0.5*i for i in range(3)]
+            ys = [y+0.5*i for i in range(3)]
+            # Calculating the Cartesion product of our Xs and Ys
+            points = [(x,y) for x in xs for y in ys]
 
-        return num_points_in_line / len(points)
+            num_points_in_line = sum(map(lambda p: self.check_if_point_in_line(p[0], p[1], region_testers), points))
+
+            return num_points_in_line / len(points)
+        else:
+            # Checking if the upper-left corner of our pixel is contained in the region
+            return float(self.check_if_point_in_line(x, y, region_testers))
+
 
     '''
     Helper function for get_line_coverage_of_pixel(). This function checks
     if a specific (x, y) point (not pixel) is within the overlap
     of our four line regions.
     '''
-    def check_if_point_in_line(self, line: Line, x: float, y: float, line_region_testers: Callable[List[float], bool]) -> bool:
+    def check_if_point_in_line(self, x: float, y: float, line_region_testers: Callable[List[float], bool]) -> bool:
         return all(map(lambda tester: tester((x,y)), line_region_testers))
 
     '''
@@ -197,14 +227,18 @@ class LineCoverage():
         Now that we know how far each corner is from the middle of each of the
         endpoints of our line, we can begin solving for the locations of the 
         four corners of the line.
+
+        Note: We want the corners of the line to rotate in 
+        one direction, otherwise our boundaries will get messed up.
         '''
+
         # Line corners nearest the first edge point
         p1 = (x1 - dx_prime, y1 + dy_prime)
         p2 = (x1 + dx_prime, y1 - dy_prime)
 
         # Line corners nearest the second edge point
-        p3 = (x2 - dx_prime, y2 + dy_prime)
-        p4 = (x2 + dx_prime, y2 - dy_prime)
+        p3 = (x2 + dx_prime, y2 - dy_prime)
+        p4 = (x2 - dx_prime, y2 + dy_prime)
 
         return np.array([p1, p2, p3, p4])
 
@@ -223,9 +257,7 @@ class LineCoverage():
         points = self.get_line_corners(line)
         # Adding the start point to the end for ease of computing
         # the final boundary edge of our line.
-        print(points)
-        points = np.append(points, points[0])
-        print(points)
+        points = np.append(arr=points, values=[points[0]], axis=0)
         return [self.create_point_in_line_region_function(points[i:i+2], points) for i in range(4)]
 
     '''
@@ -245,6 +277,7 @@ class LineCoverage():
     '''
     def create_point_in_line_region_function(self, line: NDArray[NDArray[float]], line_points: NDArray[NDArray[float]]) -> Callable[NDArray[float], bool]:
         p1, p2 = line
+        print(f"Creating line using points {p1} and {p2}")
         for x, y in filter(lambda p: ~(p == line).all(axis=1).any(), line_points):
             # Triangle point is above the line region,
             # so our "inside" region will be above the line to.
@@ -270,26 +303,31 @@ class TriangleCoverage:
         triangle       : Triangle object we're using as our boundary
         x              : X-coord of the upper-left corner of our pixel
         y              : Y-coord of the upper-left corner of our pixel
+        antialias      : Whether to apply anti-aliasing to our image generator
         region_testers : Function for checking if a point is within one of the three "regions" of a triangle
     Return:
         coverage : Fraction of the pixel that is within our shape
     '''
-    def get_triangle_coverage_for_pixel(self, triangle: Triangle, x: int, y: int, region_testers: Callable[List[float], bool]) -> float: 
-        # Splitting the pixel into 9 evenly spaced sample points.
-        xs = [x+0.5*i for i in range(3)]
-        ys = [y+0.5*i for i in range(3)]
-        # Calculating the Cartesion product of our Xs and Ys
-        points = [(x,y) for x in xs for y in ys]
-        num_points_in_triangle = sum(map(lambda p: self.check_if_point_in_triangle(triangle, p[0], p[1], region_testers), points))
+    def get_triangle_coverage_for_pixel(self, x: int, y: int, antialias: bool, region_testers: Callable[List[float], bool]) -> float: 
+        if antialias:
+            # Splitting the pixel into 9 evenly spaced sample points.
+            xs = [x+0.5*i for i in range(3)]
+            ys = [y+0.5*i for i in range(3)]
+            # Calculating the Cartesion product of our Xs and Ys
+            points = [(x,y) for x in xs for y in ys]
+            num_points_in_triangle = sum(map(lambda p: self.check_if_point_in_triangle(p[0], p[1], region_testers), points))
 
-        return num_points_in_triangle / len(points)
+            return num_points_in_triangle / len(points)
+        else:
+            # Checking if the upper-left corner of our pixel is contained in the region
+            return float(self.check_if_point_in_triangle(x, y, region_testers))
     
     '''
     Helper function for get_triangle_coverage_of_pixel(). This function checks
     if a specific (x, y) point (not pixel) is within the overlap
     of our three triangle regions.
     '''
-    def check_if_point_in_triangle(self, triangle: Triangle, x: float, y: float, triangle_region_testers: Callable[List[float], bool]) -> bool:
+    def check_if_point_in_triangle(self, x: float, y: float, triangle_region_testers: Callable[List[float], bool]) -> bool:
         return all(map(lambda tester: tester((x,y)), triangle_region_testers))
 
     '''
@@ -372,18 +410,24 @@ def rasterize(
 
         # Creating our region testers here, since otherwise we we would have to create them
         # on the fly for each pixel.
-        triangle_region_testers = TriangleCoverage().create_triangle_region_testers(shape)
-        line_region_testers = LineCoverage().create_line_region_testers(shape)
+        if shape.type == "triangle":
+            triangle_region_testers = TriangleCoverage().create_triangle_region_testers(shape)
+            line_region_testers = []
+        elif shape.type == "line":
+            triangle_region_testers = []
+            line_region_testers = LineCoverage().create_line_region_testers(shape)
 
         for x, y in bounding_box(shape):
             x_img, y_img = viewbox_coords_2_img(vb_h, vb_w, im_h, im_w, x,y)
-            a = get_coverage_for_pixel(shape, x, y, triangle_region_testers, line_region_testers)
+            a = get_coverage_for_pixel(shape, x, y, antialias, triangle_region_testers, line_region_testers)
+            # print(x, y, a)
             img[x_img, y_img] = (1-a)*img[x_img, y_img] + shape.color*a 
 
     # Rotating the image by 90 degrees,
     # since our origin shifts from the upper-left to the 
     # lower-left during our transformations.
-    img = np.rot90(img, k=3)
+    if shape.type == 'triangle': 
+        img = np.rot90(img, k=-1)
 
     if output_file:
         save_image(output_file, img)
@@ -394,7 +438,7 @@ if __name__ == "__main__":
     # print(read_svg("tests/test1.svg"))
 
     # Triangle test
-    # rasterize("tests/test1.svg", 128, 128, output_file="your_output.png", antialias=False)
+    # rasterize("tests/test1.svg", 128, 128, output_file="your_output.png", antialias=True)
 
     # Line test
-    rasterize("tests/test2.svg", 128, 128, output_file="your_output.png", antialias=False)
+    rasterize("tests/test2.svg", 128, 128, output_file="your_output.png", antialias=True)
