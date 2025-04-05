@@ -1,3 +1,5 @@
+"Please do not grade this submission yet, I am using my late bank"
+
 ## Initial Approach
 
 My initial approach on this project was to write everything -- math, function signatures, and conceptual

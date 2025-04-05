@@ -602,4 +602,4 @@ def rasterize(
     return img
 
 if __name__ == "__main__":
-    rasterize("tests/test6.svg", 256, 128, output_file="your_output.png", antialias=True)
+    rasterize("tests/custom.svg", 256, 128, output_file="your_output.png", antialias=True)
