@@ -1,9 +1,6 @@
 '''
 Remember that the coordinates for this program are centered
 around (0,0) being in the upper-left hand corner.
-
-TODO: Fix anti-aliasing
-TODO: Make get_<shape>_coverage_for_pixel a single, generalizable function
 '''
 
 from typing import Optional, Callable, Tuple, List
@@ -547,14 +544,10 @@ def rasterize(
             a = get_coverage_for_pixel(shape, x, y, antialias, triangle_region_testers, line_region_testers)
             img[y, x] = (1-a)*img[y, x] + shape.color*a 
 
-    # Rotating the image by 90 degrees,
-    # since our origin shifts from the upper-left to the 
-    # lower-left during our transformations.
-
     if output_file:
         save_image(output_file, img)
 
     return img
 
 if __name__ == "__main__":
-    rasterize("tests/custom.svg", 200, 200, output_file="your_output.png", antialias=True)
+    rasterize("tests/custom.svg", 100, 100, output_file="your_output.png", antialias=True)
