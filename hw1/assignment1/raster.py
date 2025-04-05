@@ -155,13 +155,66 @@ def get_coverage_for_pixel(shape: Shape,
         return TriangleCoverage().get_triangle_coverage_for_pixel(x, y, antialias, triangle_region_testers)
 
     elif shape.type == "circle":
-        pass
+        return CircleCoverage().get_line_coverage_for_circle(shape, x, y, antialias)
 
     elif shape.type == "line":
         return LineCoverage().get_line_coverage_for_pixel(x, y, antialias, line_region_testers)
 
     else:
         raise ValueError("not sure what shape was given")
+
+class CircleCoverage():
+    '''
+    Helper function for get_coverage_of_pixel(), but with a
+    specific application for checking what the coverage of a pixel is
+    for a given circle.
+
+    We split each pixel up into 9 points, and check if each of those points
+    falls inside our outside the region of the line.
+
+    Args:  
+        circle    : Circle() object 
+        x         : X-coord of the upper-left corner of our pixel
+        y         : Y-coord of the upper-left corner of our pixel
+        antialias : Whether we want to apply anti-aliasing to our image generation
+    Return:
+        coverage : Fraction of the pixel that is within our shape
+    '''
+    def get_line_coverage_for_circle(self, circle: Circle, x: int, y: int, antialias: bool) -> float: 
+        r = circle.radius
+        x_offset, y_offset = circle.center
+
+        if antialias:
+            # Splitting the pixel into 9 evenly spaced sample points.
+            xs = [x+0.5*i for i in range(3)]
+            ys = [y+0.5*i for i in range(3)]
+            # Calculating the Cartesion product of our Xs and Ys
+            points = [(x,y) for x in xs for y in ys]
+
+            num_points_in_line = sum(map(lambda p: self.check_if_point_in_circle(p[0], p[1], x_offset, y_offset, r), points))
+
+            return num_points_in_line / len(points)
+        else:
+            # Checking if the upper-left corner of our pixel is contained in the region
+            return float(self.check_if_point_in_circle(x, y, x_offset, y_offset, r))
+
+    '''
+    Given a circle defined by a radius, and x and y-offset, we want to check if
+    if a point lies within this circle.
+
+    Args:
+        x        : X-value for the point we're checking
+        y        : Y-value for the point we're checking
+        x_offset : X-value offset for the circle
+        y_offset : Y-value offset for the circle
+        r        : Circle radius
+    
+    Return:
+        in_circle (bool) : Boolean representing whether a point is inside the circle.
+                           On the edge counts as in. 
+    '''
+    def check_if_point_in_circle(self, x: float, y: float, x_offset: float, y_offset: float, r: float) -> bool:
+        return (x - x_offset)**2 + (y - y_offset)**2 <= r**2
 
 class LineCoverage():
     '''
