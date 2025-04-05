@@ -557,10 +557,4 @@ def rasterize(
     return img
 
 if __name__ == "__main__":
-    # print(read_svg("tests/test1.svg"))
-
-    # Triangle test
-    # rasterize("tests/test1.svg", 128, 128, output_file="your_output.png", antialias=True)
-
-    # Line test
     rasterize("tests/custom.svg", 200, 200, output_file="your_output.png", antialias=True)
