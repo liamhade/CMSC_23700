@@ -69,7 +69,7 @@ def bounding_box(viewbox_h: int, viewbox_w: int, shape: Shape) -> List[List[int]
     min_x = int(np.clip(min_x, 0, viewbox_w))
     max_x = int(np.clip(max_x, 0, viewbox_w))
     min_y = int(np.clip(min_y, 0, viewbox_h))
-    max_y = int(np.clip(max_y, 0, viewbox_h))    
+    max_y = int(np.clip(max_y, 0, viewbox_h)) 
 
     # Creating range of bounding-box values
     xs_bb = range(min_x, max_x)
@@ -99,7 +99,6 @@ def viewbox_2_img_scales(viewbox_h: int,
                          img_w    : int) -> Tuple[float]:
     x_scale = img_w / viewbox_w
     y_scale = img_h / viewbox_h
-
     return (x_scale, y_scale)
 
 '''
@@ -566,10 +565,18 @@ def rasterize(
         # Using original shape (not img_shape) for our bounding box
         # because it makes the calculations easier. We then convert the
         # viewbox coordinates to image coordinates after getting the bound-box point.
-        for x, y in bounding_box(vb_h, vb_w, shape):
-            x_img, y_img = viewbox_coords_2_img_point(vb_h, vb_w, im_h, im_w, x, y)
-            # Converting to integers, since the image points might be floats.
-            x_img, y_img = int(x_img), int(y_img)
+        
+        # Viewbox bounding-box
+        viewbox_bb = bounding_box(vb_h, vb_w, shape)
+        # Getting image bounding-box
+        img_bb = [viewbox_coords_2_img_point(vb_h, vb_w, im_h, im_w, x, y) for x,y in viewbox_bb]
+        # Converting to integers for each pixel
+        img_bb = [(int(x), int(y)) for x,y in img_bb]
+        # Removing duplicates and converting back to np array
+        img_bb = np.array(list(set(img_bb)))
+
+        # print(img_bb)
+        for x_img, y_img in img_bb:
             a = get_coverage_for_pixel(shape, x_img, y_img, antialias, triangle_region_testers, line_region_testers, circle_region_tester)
             img[y_img, x_img] = (1-a)*img[y_img, x_img] + shape.color*a 
 

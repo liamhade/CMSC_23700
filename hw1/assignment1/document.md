@@ -14,7 +14,7 @@ I should also note that I started off the coding / thought process assuming that
 
 ## Challenges
 
-One of the challenges I came across was how to handle the viewbox to image coordinate translation. My first instinct was to use a function that finds the aspect ratio between the viewbox and image width, and the viewbox and image height, and use these values to scale the x-coordinates and y-coordinates. However, I found this to be troublesoe for the shape.width and shape.radius attributes for Line() and Circle(), respectively. My simpler approach was to use a single scaling factor determined by whichever dimension (height / width) was smaller (the constraining dimension) and scale the image using that. This way, I would only need one number 
+One of the challenges I came across was how to handle the viewbox to image coordinate translation. I settled on an approachh that uses a function that finds the aspect ratio between the viewbox and image width, and the viewbox and image height, and uses these values to scale the x-coordinates and y-coordinates. Using this scaling factor was easy to implement for the triangles, since I just had to apply the scaling to each of the corners. 
 
 Realized that I wasn't indexing into my image properly (x and y coordinates were flipped).
 
