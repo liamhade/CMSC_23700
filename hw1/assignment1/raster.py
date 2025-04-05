@@ -350,7 +350,6 @@ class LineCoverage():
     '''
     def create_point_in_line_region_function(self, line: NDArray[NDArray[float]], line_points: NDArray[NDArray[float]]) -> Callable[NDArray[float], bool]:
         p1, p2 = line
-        # print(f"Creating line using points {p1} and {p2}")
         for x, y in filter(lambda p: ~(p == line).all(axis=1).any(), line_points):
             # Triangle point is above the line region,
             # so our "inside" region will be above the line to.
@@ -455,7 +454,7 @@ class TriangleCoverage:
 The first step for in this graphics pipeline is to transform the
 viewbox coordinates into image coordinates. Thus, we need to make sure
 that the points and lengths decribed by our shapes are appropriate
-for the given transformation
+for the given transformation.
 '''
 class Scale:
     def __init__(self, viewbox_h: int, viewbox_w: int, img_h: int, img_w: int):
@@ -550,4 +549,4 @@ def rasterize(
     return img
 
 if __name__ == "__main__":
-    rasterize("tests/custom.svg", 100, 100, output_file="your_output.png", antialias=True)
+    rasterize("tests/test5.svg", 128, 256, output_file="your_output.png", antialias=True)
