@@ -2,7 +2,6 @@
 Remember that the coordinates for this program are centered
 around (0,0) being in the upper-left hand corner.
 
-TODO: Be able to turn off anti-aliasing
 TODO: Fix anti-aliasing
 TODO: Make get_<shape>_coverage_for_pixel a single, generalizable function
 '''
@@ -38,12 +37,14 @@ we use a bounding box to restrict the number of pixels
 we actually need to examine.'
 
 Args:
-    shape : Shape we will be creating a bounding box for.
+    viewbox_h : Viewbox height in pixels
+    viewbox_w : Viewbox width in pixels
+    shape     : Shape we will be creating a bounding box for.
 
 Return:
     bb : Pixels contained in our bounding box
 '''
-def bounding_box(shape: Shape) -> List[List[int]]:
+def bounding_box(viewbox_h: int, viewbox_w: int, shape: Shape) -> List[List[int]]:
     if shape.type in ["triangle", "line"]:
         if shape.type == "triangle":
             pts = shape.pts
@@ -60,21 +61,24 @@ def bounding_box(shape: Shape) -> List[List[int]]:
         min_x, max_x = min(xs), max(xs)
         min_y, max_y = min(ys), max(ys)
 
-        xs_bb = range(min_x, max_x + 1)
-        ys_bb = range(min_y, max_y + 1)
-
-        # Cartesion product of our X and Y values.
-        return list(product(xs_bb, ys_bb))
-
     elif shape.type == "circle":
-        # Upper-left because on our pixel-grid, the origin
-        # is in the upper-left.
-        upper_left  = shape.center - shape.radius
-        lower_right = shape.center + shape.radius
-        return (upper_left, upper_left), (lower_right, lower_right)
+        min_x, min_y = list(shape.center - shape.radius)
+        max_x, max_y = list(shape.center + shape.radius)
     else:
         raise ValueError("Unknown shape type.")
 
+    # Clip our values to be within the viewbox
+    min_x = int(np.clip(min_x, 0, viewbox_w))
+    max_x = int(np.clip(max_x, 0, viewbox_w))
+    min_y = int(np.clip(min_y, 0, viewbox_h))
+    max_y = int(np.clip(max_y, 0, viewbox_h))    
+
+    # Creating range of bounding-box values
+    xs_bb = range(min_x, max_x)
+    ys_bb = range(min_y, max_y)
+
+    # Cartesion product of our X and Y values.
+    return list(product(xs_bb, ys_bb))
 
 '''
 The viewbox of our SVG may (and likely does) have different
@@ -188,10 +192,10 @@ class CircleCoverage():
             # Splitting the pixel into 9 evenly spaced sample points.
             xs = [x+0.5*i for i in range(3)]
             ys = [y+0.5*i for i in range(3)]
-            # Calculating the Cartesion product of our Xs and Ys
-            points = [(x,y) for x in xs for y in ys]
 
-            num_points_in_line = sum(map(lambda p: self.check_if_point_in_circle(p[0], p[1], x_offset, y_offset, r), points))
+            # Calculating the Cartesion product of our Xs and Ys
+            points = list(product(xs, ys))
+            num_points_in_line = sum([self.check_if_point_in_circle(x, y, x_offset, y_offset, r) for (x,y) in points])
 
             return num_points_in_line / len(points)
         else:
@@ -330,7 +334,7 @@ class LineCoverage():
     '''
     def create_point_in_line_region_function(self, line: NDArray[NDArray[float]], line_points: NDArray[NDArray[float]]) -> Callable[NDArray[float], bool]:
         p1, p2 = line
-        print(f"Creating line using points {p1} and {p2}")
+        # print(f"Creating line using points {p1} and {p2}")
         for x, y in filter(lambda p: ~(p == line).all(axis=1).any(), line_points):
             # Triangle point is above the line region,
             # so our "inside" region will be above the line to.
@@ -460,7 +464,6 @@ def rasterize(
 
     # the first shape in shapes is always the SVG object with the viewbox sizes
     for shape in shapes[1:]:
-
         # Creating our region testers here, since otherwise we we would have to create them
         # on the fly for each pixel.
         if shape.type == "triangle":
@@ -469,18 +472,19 @@ def rasterize(
         elif shape.type == "line":
             triangle_region_testers = []
             line_region_testers = LineCoverage().create_line_region_testers(shape)
+        else:
+            triangle_region_testers = []
+            line_region_testers = []
 
-        for x, y in bounding_box(shape):
-            x_img, y_img = viewbox_coords_2_img(vb_h, vb_w, im_h, im_w, x,y)
+        # print(shape)
+        for x, y in bounding_box(vb_h, vb_w, shape):
+            x_img, y_img = viewbox_coords_2_img(vb_h, vb_w, im_h, im_w, x, y)
             a = get_coverage_for_pixel(shape, x, y, antialias, triangle_region_testers, line_region_testers)
-            # print(x, y, a)
-            img[x_img, y_img] = (1-a)*img[x_img, y_img] + shape.color*a 
+            img[y_img, x_img] = (1-a)*img[y_img, x_img] + shape.color*a 
 
     # Rotating the image by 90 degrees,
     # since our origin shifts from the upper-left to the 
     # lower-left during our transformations.
-    if shape.type == 'triangle': 
-        img = np.rot90(img, k=-1)
 
     if output_file:
         save_image(output_file, img)
@@ -494,4 +498,4 @@ if __name__ == "__main__":
     # rasterize("tests/test1.svg", 128, 128, output_file="your_output.png", antialias=True)
 
     # Line test
-    rasterize("tests/test2.svg", 128, 128, output_file="your_output.png", antialias=True)
+    rasterize("tests/test1.svg", 128, 128, output_file="your_output.png", antialias=True)
