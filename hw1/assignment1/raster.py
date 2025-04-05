@@ -502,6 +502,53 @@ class Scale:
         circle.b = y_scale        
         return circle
 
+'''
+This function creates the region testers for our three kinds of shapes:
+triangle, line, and circle.
+
+Args:
+    shape : Shape object that we are creating the region testers for
+    vb_h  : Viewbox height
+    vb_w  : Viewbox width
+    im_h  : Image height
+    im_w  : Image width
+
+Return:
+    region_testers : List containg our region testers for triangle, line, and circle shapes
+'''
+def create_region_testers(shape: Shape, vb_h: int, vb_w: int, im_h: int, im_w: int):
+    shape_scaler = Scale(vb_h, vb_w, im_h, im_w)
+
+    if shape.type == "triangle":
+        # We convert the shape here so that the bounding box is made correctly.
+        triangle_region_testers = TriangleCoverage().create_triangle_region_testers(shape_scaler.scale_points(shape.pts))
+        line_region_testers     = []
+        circle_region_tester    = None
+
+    elif shape.type == "line":            
+        triangle_region_testers = []
+
+        line_corners             = LineCoverage().get_line_corners(shape)
+        transformed_line_corners = shape_scaler.scale_points(line_corners)
+        line_region_testers      = LineCoverage().create_line_region_testers(transformed_line_corners)
+        
+        circle_region_tester     = []
+    
+    elif shape.type == "circle":
+        triangle_region_testers = []
+        line_region_testers     = []
+
+        # Ellipse coefficients
+        a, b = viewbox_2_img_scales(vb_h, vb_w, im_h, im_w)
+        cx, cy = shape.center
+        shifted_center = viewbox_coords_2_img_point(vb_h, vb_w, im_h, im_w, cx, cy)
+        circle_region_tester = CircleCoverage().create_circle_region_tester(shifted_center, shape.radius, a, b)
+
+    else:
+        raise ValueError(f"Unknown shape type of {shape.type}")
+
+    return (triangle_region_testers, line_region_testers, circle_region_tester)
+
 def rasterize(
     svg_file: str,
     im_w: int,
@@ -533,38 +580,7 @@ def rasterize(
     # the first shape in shapes is always the SVG object with the viewbox sizes
     for shape in shapes[1:]:
 
-        shape_scaler = Scale(vb_h, vb_w, im_h, im_w)
-
-        # Creating our region testers here, since otherwise we we would have to create them
-        # on the fly for each pixel.
-        if shape.type == "triangle":
-            # We convert the shape here so that the bounding box is made correctly.
-            triangle_region_testers = TriangleCoverage().create_triangle_region_testers(shape_scaler.scale_points(shape.pts))
-            line_region_testers     = []
-            circle_region_tester    = None
-
-        elif shape.type == "line":            
-            triangle_region_testers = []
-
-            line_corners             = LineCoverage().get_line_corners(shape)
-            transformed_line_corners = shape_scaler.scale_points(line_corners)
-            line_region_testers      = LineCoverage().create_line_region_testers(transformed_line_corners)
-            
-            circle_region_tester     = []
-        
-        elif shape.type == "circle":
-            triangle_region_testers = []
-            line_region_testers     = []
-
-            # Ellipse coefficients
-            a, b = viewbox_2_img_scales(vb_h, vb_w, im_h, im_w)
-            cx, cy = shape.center
-            shifted_center = viewbox_coords_2_img_point(vb_h, vb_w, im_h, im_w, cx, cy)
-            circle_region_tester = CircleCoverage().create_circle_region_tester(shifted_center, shape.radius, a, b)
-
-        # Using original shape (not img_shape) for our bounding box
-        # because it makes the calculations easier. We then convert the
-        # viewbox coordinates to image coordinates after getting the bound-box point.
+        triangle_region_testers, line_region_testers, circle_region_tester =  create_region_testers(shape, vb_h, vb_w, im_h, im_w)
         
         # Viewbox bounding-box
         viewbox_bb = bounding_box(vb_h, vb_w, shape)
@@ -575,7 +591,7 @@ def rasterize(
         # Removing duplicates and converting back to np array
         img_bb = np.array(list(set(img_bb)))
 
-        # print(img_bb)
+        # Iterating through the pixels in our image bounding box
         for x_img, y_img in img_bb:
             a = get_coverage_for_pixel(shape, x_img, y_img, antialias, triangle_region_testers, line_region_testers, circle_region_tester)
             img[y_img, x_img] = (1-a)*img[y_img, x_img] + shape.color*a 
@@ -586,4 +602,4 @@ def rasterize(
     return img
 
 if __name__ == "__main__":
-    rasterize("tests/test5.svg", 16, 16, output_file="your_output.png", antialias=True)
+    rasterize("tests/test6.svg", 256, 128, output_file="your_output.png", antialias=True)
