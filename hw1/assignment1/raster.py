@@ -454,6 +454,48 @@ class TriangleCoverage:
         
         raise ValueError("No (x, y) to iterate over")
 
+'''
+The first step for in this graphics pipeline is to transform the
+viewbox coordinates into image coordinates. Thus, we need to make sure
+that the points and lengths decribed by our shapes are appropriate
+for the given transformation
+'''
+class Scale:
+    def __init__(self, viewbox_h: int, viewbox_w: int, img_h: int, img_w: int):
+        self.viewbox_h = viewbox_h
+        self.viewbox_w = viewbox_w
+        self.img_h = img_h
+        self.img_w = img_w
+
+    '''
+    Scales and pads the three defining points of the triangle.
+    '''
+    def scale_triangle(self, triangle: Triangle):   
+        scaled_points = [viewbox_coords_2_img(self.viewbox_h, self.viewbox_w, self.img_h, self.img_w, x, y) for (x, y) in triangle.pts]
+        triangle.pts = np.array(scaled_points)
+        return triangle
+    
+    '''
+    Scales and pads the two defining points of the line, and also
+    scales the width of the line.
+    '''
+    def scale_line(self, line: Line):
+        scaled_points = [viewbox_coords_2_img(self.viewbox_h, self.viewbox_w, self.img_h, self.img_w, x, y) for (x, y) in line.pts]
+        scaled_width  = line.width * viewbox_2_img_scale_and_padding(self.viewbox_h, self.viewbox_w, self.img_h, self.img_w)[0]
+        line.pts   = np.array(scaled_points)
+        line.width = scaled_width
+        return line
+
+    '''
+    Scales and pads the center point of the circle, and scales
+    the radius.
+    '''
+    def scale_circle(self, circle: Circle):
+        scaled_center = viewbox_coords_2_img(self.viewbox_h, self.viewbox_w, self.img_h, self.img_w, circle.center[0], circle.center[1])
+        circle.radius = circle.radius * viewbox_2_img_scale_and_padding(self.viewbox_h, self.viewbox_w, self.img_h, self.img_w)[0]
+        circle.center = np.array(scaled_center)
+        return circle
+
 def rasterize(
     svg_file: str,
     im_w: int,
@@ -483,40 +525,24 @@ def rasterize(
 
     # the first shape in shapes is always the SVG object with the viewbox sizes
     for shape in shapes[1:]:
-        
+        shape_scaler = Scale(vb_h, vb_w, im_h, im_w)
         # Creating our region testers here, since otherwise we we would have to create them
         # on the fly for each pixel.
         if shape.type == "triangle":
-            # TODO: Move this out into a function
-            # Converting triangle coordinates from viewbox to image coords.
-            scaled_points = [viewbox_coords_2_img(vb_h, vb_w, im_h, im_w, x, y) for (x, y) in shape.pts]
-            shape.pts = np.array(scaled_points)
-
+            shape = shape_scaler.scale_triangle(shape)
             triangle_region_testers = TriangleCoverage().create_triangle_region_testers(shape)
             line_region_testers = []
 
         elif shape.type == "line":
-            # TODO: Move this out into a function
-            # Converting triangle coordinates from viewbox to image coords.
-            scaled_points = [viewbox_coords_2_img(vb_h, vb_w, im_h, im_w, x, y) for (x, y) in shape.pts]
-            scaled_width  = shape.width * viewbox_2_img_scale_and_padding(vb_h, vb_w, im_h, im_w)[0]
-            shape.pts   = np.array(scaled_points)
-            shape.width = scaled_width
-
+            shape = shape_scaler.scale_line(shape)
             triangle_region_testers = []
             line_region_testers = LineCoverage().create_line_region_testers(shape)
         
         elif shape.type == "circle":
-
-            scaled_center = viewbox_coords_2_img(vb_h, vb_w, im_h, im_w, shape.center[0], shape.center[1])
-            scaled_radius = shape.radius * viewbox_2_img_scale_and_padding(vb_h, vb_w, im_h, im_w)[0]
-            shape.center = np.array(scaled_center)
-            shape.radius = scaled_radius
-
+            shape = shape_scaler.scale_circle(shape)
             triangle_region_testers = []
             line_region_testers = []
 
-        # print(shape)
         for x, y in bounding_box(im_h, im_w, shape):
             a = get_coverage_for_pixel(shape, x, y, antialias, triangle_region_testers, line_region_testers)
             img[y, x] = (1-a)*img[y, x] + shape.color*a 
@@ -537,4 +563,4 @@ if __name__ == "__main__":
     # rasterize("tests/test1.svg", 128, 128, output_file="your_output.png", antialias=True)
 
     # Line test
-    rasterize("tests/test6.svg", 128, 128, output_file="your_output.png", antialias=True)
+    rasterize("tests/custom.svg", 200, 200, output_file="your_output.png", antialias=True)
