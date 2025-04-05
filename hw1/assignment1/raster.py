@@ -478,8 +478,8 @@ def rasterize(
 
         # print(shape)
         for x, y in bounding_box(vb_h, vb_w, shape):
-            x_img, y_img = viewbox_coords_2_img(vb_h, vb_w, im_h, im_w, x, y)
             a = get_coverage_for_pixel(shape, x, y, antialias, triangle_region_testers, line_region_testers)
+            x_img, y_img = viewbox_coords_2_img(vb_h, vb_w, im_h, im_w, x, y)
             img[y_img, x_img] = (1-a)*img[y_img, x_img] + shape.color*a 
 
     # Rotating the image by 90 degrees,
@@ -498,4 +498,4 @@ if __name__ == "__main__":
     # rasterize("tests/test1.svg", 128, 128, output_file="your_output.png", antialias=True)
 
     # Line test
-    rasterize("tests/test1.svg", 128, 128, output_file="your_output.png", antialias=True)
+    rasterize("tests/custom.svg", 128, 128, output_file="your_output.png", antialias=True)
