@@ -89,7 +89,7 @@ def triangle_bounding_box(img_h: int, img_w: int, vertices: np.array) -> np.arra
     min_x = int(np.clip(vertices.min(axis=0)[0], 0, img_w))
     min_y = int(np.clip(vertices.min(axis=0)[1], 0, img_h))
     max_x = int(np.clip(vertices.max(axis=0)[0], 0, img_w))
-    max_y = int(np.clip(vertices.max(axis=1)[1], 0, img_h))
+    max_y = int(np.clip(vertices.max(axis=0)[1], 0, img_h))
 
     return (min_x, min_y), (max_x, max_y)
 
@@ -146,21 +146,21 @@ def render_ortho(obj: TriangleMesh, im_w: int, im_h: int):
     n = 12
 
     # Orthogonal projection matrix
-    m_ortho = [
+    m_ortho = np.array([
         [1/6, 0, 0, -1],
         [0, 1/6, 0, -1],
         [0, 0, 1/6, -1],
         [0, 0, 0, 1]
-    ]
+    ])
 
     # Matric for converting our cube into the scale of our
     # image.
-    m_img = [
+    m_img = np.array([
         [im_w, 0, 0, 0],
         [0, im_h, 0, 0],
         [0, 0, 0, 0],
         [im_w, im_h, 0, 0]
-    ]
+    ])
 
     # Initializing our empty image
     img = np.zeros((im_h, im_w, 3))
@@ -191,6 +191,8 @@ def render_ortho(obj: TriangleMesh, im_w: int, im_h: int):
         v1 = ((tri_v1_o @ m_img) / 2)[:2]
         v2 = ((tri_v2_o @ m_img) / 2)[:2]
         v3 = ((tri_v3_o @ m_img) / 2)[:2]
+
+        print(v1,v2,v3, c)
 
         triangle_image_verties = np.array([v1, v2, v3])
 
