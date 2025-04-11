@@ -43,6 +43,56 @@ def read_image(fname: str) -> np.ndarray:
     return np.asarray(Image.open(fname)).astype(np.float64) / 255
 
 
+def point_in_triangle(p: np.array, A: np.array, B: np.array, C: np.array) -> bool:
+    """
+    Checks if a point lies within a 2D triangle using a Barycentric coordinate
+    system.
+
+    Args:
+        p : Point whose inclusion we are testing for
+        A : 1st triangle vertex
+        B : 2nd triangle vertex
+        C : 3rd triangle vertex 
+    
+    Return:
+        inside : Boolean indicating whether the point is inside our triangle
+    """
+    v1 = A - C
+    v2 = B - C
+    v3 = p - C
+
+    # (2,2) matrix for our triangle
+    m = np.column_stack((v1, v2))
+    # Solving for the alpha and beta values of our triangle
+    try:
+        alpha, beta = np.linalg.solve(m, v3) 
+    # Triangle with 0 area 
+    except np.linalg.LinAlgError:
+        return False
+
+    gamma = 1 - alpha - beta
+
+    return (alpha >= 0) and (beta >= 0) and (gamma >= 0)
+
+def triangle_bounding_box(img_h: int, img_w: int, vertices: np.array) -> np.array:
+    """
+    Finds the binding box for a triangle with vertices v1, v2, and v3.
+
+    Args:
+        img_h    : Height of the image
+        img_w    : Width of the image
+        vertices : Numpy array of the triangle vertices
+    Return:
+        Lower-left and upper-right corner of the triangle
+    """
+
+    min_x = int(np.clip(vertices.min(axis=0)[0], 0, img_w))
+    min_y = int(np.clip(vertices.min(axis=0)[1], 0, img_h))
+    max_x = int(np.clip(vertices.max(axis=0)[0], 0, img_w))
+    max_y = int(np.clip(vertices.max(axis=1)[1], 0, img_h))
+
+    return (min_x, min_y), (max_x, max_y)
+
 # P1
 def render_viewport(obj: TriangleMesh, im_w: int, im_h: int):
     """
@@ -103,9 +153,54 @@ def render_ortho(obj: TriangleMesh, im_w: int, im_h: int):
         [0, 0, 0, 1]
     ]
 
-    
+    # Matric for converting our cube into the scale of our
+    # image.
+    m_img = [
+        [im_w, 0, 0, 0],
+        [0, im_h, 0, 0],
+        [0, 0, 0, 0],
+        [im_w, im_h, 0, 0]
+    ]
 
-    return save_image("p2.png", YOUR_IMAGE_ARRAY_HERE)
+    # Initializing our empty image
+    img = np.zeros((im_h, im_w, 3))
+
+    # Each vertex as length 3
+    projected_vertices = []
+    for v in obj.vertices:
+        # Viewport matrix has shape (4,4), so we need to add
+        # an extra homogenous datapoint for the shapes to line up.
+        # Since a vertex is a point, we append c=1.
+        v = np.append(v, [1])
+        # Applying our ortho matrix to v to get a length 4 array.
+        vp = m_ortho @ v
+        # Dividing by our homogenous coordinate (still a length 4 vector)
+        vp = vp / vp[-1]
+        
+        projected_vertices.append(vp)
+
+    # Converting the projected vertices into a numpy array
+    p_v = np.array(projected_vertices)
+
+    for (i1, i2, i3), c in zip(obj.faces, obj.face_colors):
+        # Grabbing the three vertices of our triangle in their orthonormal form.
+        # Each one is a numpy array of length 4.
+        tri_v1_o, tri_v2_o, tri_v3_o = p_v[i1], p_v[i2], p_v[i3]
+        # Using the image width and height to translate our vertices
+        # into points (not pixels yet) in our image
+        v1 = ((tri_v1_o @ m_img) / 2)[:2]
+        v2 = ((tri_v2_o @ m_img) / 2)[:2]
+        v3 = ((tri_v3_o @ m_img) / 2)[:2]
+
+        triangle_image_verties = np.array([v1, v2, v3])
+
+        for x,y in triangle_bounding_box(im_h, im_w, triangle_image_verties):
+            if point_in_triangle((x, y), v1, v2, v3):
+                img[y,x] = c
+                
+            print(x,y)
+
+    return save_image("my_p2.png", img)
     
 # P3
 def render_camera(obj: TriangleMesh, im_w: int, im_h: int):
@@ -302,7 +397,7 @@ if __name__ == "__main__":
 
     # NOTE for your own testing purposes:
     # Uncomment and run each of these commented-out functions after you've filled them out
-    render_viewport(cube, im_w, im_h)
+    # render_viewport(cube, im_w, im_h)
 
     ortho_vertices = np.array(
         [
@@ -317,7 +412,7 @@ if __name__ == "__main__":
         ]
     )
     ortho_cube = TriangleMesh(ortho_vertices, triangles, triangle_colors)
-    # render_ortho(ortho_cube, im_w, im_h)
+    render_ortho(ortho_cube, im_w, im_h)
     # render_camera(ortho_cube, im_w, im_h)
     # render_perspective(cube, im_w, im_h)
     vertex_colors = np.array(
