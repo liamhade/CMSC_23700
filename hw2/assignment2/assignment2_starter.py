@@ -194,12 +194,14 @@ def render_ortho(obj: TriangleMesh, im_w: int, im_h: int):
 
         triangle_image_verties = np.array([v1, v2, v3])
 
-        for x,y in triangle_bounding_box(im_h, im_w, triangle_image_verties):
-            if point_in_triangle((x, y), v1, v2, v3):
-                img[y,x] = c
-                
-            print(x,y)
+        (min_x, min_y), (max_x, max_y) = triangle_bounding_box(im_h, im_w, triangle_image_verties)
 
+        for x in range(min_x, max_x + 1):
+            for y in range(min_y, max_y + 1):
+                # Checking the middle of the pixel
+                if point_in_triangle(np.array([x + 0.5, y + 0.5]), v1, v2, v3):
+                    img[y, x] = c
+                
     return save_image("my_p2.png", img)
     
 # P3
