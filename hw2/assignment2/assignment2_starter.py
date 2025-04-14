@@ -145,6 +145,14 @@ def render_ortho(obj: TriangleMesh, im_w: int, im_h: int):
     f = 0
     n = 12
 
+    # Viewport matrix
+    m_vp = np.array([
+        [im_w/2, 0, 0, im_w/2],
+        [0, im_h/2, 0, im_h/2],
+        [0, 0, 1, 0],
+        [0, 0, 0, 1],
+    ])
+
     # Orthogonal projection matrix
     m_ortho = np.array([
         [2/(r-l), 0, 0, -(r+l)/(r-l)],
@@ -153,45 +161,35 @@ def render_ortho(obj: TriangleMesh, im_w: int, im_h: int):
         [0, 0, 0, 1]
     ])
 
-    # # Matrix for converting our cube into the scale of our
-    # # image.
-    # m_img = np.array([
-    #     [im_w, 0, 0, 0],
-    #     [0, im_h, 0, 0],
-    #     [0, 0, 0, 0],
-    #     [im_w, im_h, 0, 0]
-    # ])
-
     # Initializing our empty image
     img = np.zeros((im_h, im_w, 3))
-
-    # Each vertex as length 3
-    projected_vertices = []
-    for v in obj.vertices:
-        # Viewport matrix has shape (4,4), so we need to add
-        # an extra homogenous datapoint for the shapes to line up.
-        # Since a vertex is a point, we append c=1.
-        v = np.append(v, [1])
-        # Applying our ortho matrix to v to get a length 4 array.
-        vp = m_ortho @ v
-        # Dividing by our homogenous coordinate (still a length 4 vector)
-        vp = vp / vp[-1]
-        
-        projected_vertices.append(vp)
-
-    # Converting the projected vertices into a numpy array
-    p_v = np.array(projected_vertices)
 
     # Converting each of the vertices into our image viewbox
     for (i1, i2, i3), c in zip(obj.faces, obj.face_colors):
         # Grabbing the three vertices of our triangle in their orthonormal form.
-        # Each one is a numpy array of length 4.
-        tri_v1_o, tri_v2_o, tri_v3_o = p_v[i1], p_v[i2], p_v[i3]
-        # Using the image width and height to translate our vertices
-        # into points (not pixels yet) in our image
-        v1 = ((tri_v1_o @ m_img) / 2)[:2]
-        v2 = ((tri_v2_o @ m_img) / 2)[:2]
-        v3 = ((tri_v3_o @ m_img) / 2)[:2]
+        # Each one is a numpy array of length 3, but we need to add our homogenous
+        # coordinate w.
+        v1, v2, v3 = obj.vertices[i1], obj.vertices[i2], obj.vertices[i3]
+        # print(v1, v2, v3)
+        # Adding homegenous coordinates
+        v1 = np.append(v1, [1])
+        v2 = np.append(v2, [1])
+        v3 = np.append(v3, [1])
+        # print("space")
+        # print(v1, v2, v3)
+
+        # Translating our coordinates using the viewport and image matrices.
+        # The output will be a (4,1) array, as seen on page 141 of the textbook.
+        v1 = m_vp @ m_ortho @ v1
+        v2 = m_vp @ m_ortho @ v2
+        v3 = m_vp @ m_ortho @ v3
+
+        # Only keeping the x and y coordinates of our triangle vertices.
+        # Now the array is of shape (2,)
+        v1 = v1[:2]
+        v2 = v2[:2]
+        v3 = v3[:2]
+
         triangle_image_vertices = np.array([v1, v2, v3])
 
         (min_x, min_y), (max_x, max_y) = triangle_bounding_box(im_h, im_w, triangle_image_vertices)
