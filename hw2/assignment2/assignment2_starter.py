@@ -305,10 +305,107 @@ def render_camera(obj: TriangleMesh, im_w: int, im_h: int):
 # P4
 def render_perspective(obj: TriangleMesh, im_w: int, im_h: int):
     """Render the perspective projection with perspective divide"""
-    return save_image("p4.png", YOUR_IMAGE_ARRAY_HERE)
-    
 
+     # Calculating the distance of our eye from the image plane
+    e = np.array([0.2, 0.2, 1])
+    lookat = np.array([0, 0, 0]) 
+    g = lookat - e
+    t = np.array([0, 1, 0])
 
+    # Calculating u, v, and w values
+    w = - g / np.linalg.norm(g)
+    u = np.cross(t, w) / np.linalg.norm(np.cross(t, w))
+    v = np.cross(w, u)
+
+    # Calculating camera matrix using two (4,4) matrices from the textbook
+    m1 = np.array([
+        [u[0], u[1], u[2], 0],
+        [v[0], v[1], v[2], 0],
+        [w[0], w[1], w[2], 0],
+        [0, 0 ,0 , 1]
+    ])
+    m2 = np.array([
+        [1, 0, 0, -e[0]],
+        [0, 1, 0, -e[1]],
+        [0, 0, 1, -e[2]],
+        [0, 0, 0, 1],
+    ])
+    # Camera matrix is a (4,4) array
+    m_cam = m1 @ m2
+
+    # Viewbox values
+    l = 0
+    r = 12
+    b = 0
+    t = 12
+    f = 0
+    n = 12
+
+    # Viewport matrix
+    m_vp = np.array([
+        [im_w/2, 0, 0, im_w/2],
+        [0, im_h/2, 0, im_h/2],
+        [0, 0, 1, 0],
+        [0, 0, 0, 1],
+    ])
+
+    # Orthogonal projection matrix
+    m_ortho = np.array([
+        [2/(r-l), 0, 0, -(r+l)/(r-l)],
+        [0, 2/(t-b), 0, -(t+b)/(t-b)],
+        [0, 0, 2/(n-f), -(n+f)/(n-f)],
+        [0, 0, 0, 1]
+    ])
+
+    # Perspective matrix
+    P = np.array([
+        [n, 0, 0, 0],
+        [0, n, 0, 0],
+        [0, 0, n+f, -f*n],
+        [0, 0, 1, 0]
+    ])
+
+    # Perspective projection matrix
+    m_per = m_ortho @ P
+
+    # Initializing our empty image
+    img = np.zeros((im_h, im_w, 3))
+
+    # Converting each of the vertices into our image viewbox
+    for (i1, i2, i3), c in zip(obj.faces, obj.face_colors):
+        # Grabbing the three vertices of our triangle in their orthonormal form.
+        # Each one is a numpy array of length 3, but we need to add our homogenous
+        # coordinate w.
+        v1, v2, v3 = obj.vertices[i1], obj.vertices[i2], obj.vertices[i3]
+        # Adding homegenous coordinates
+        v1 = np.append(v1, [1])
+        v2 = np.append(v2, [1])
+        v3 = np.append(v3, [1])
+
+        # Translating our coordinates using the viewport and image matrices.
+        # The output will be a (4,1) array, as seen on page 141 of the textbook.
+        v1 = m_vp @ m_per @ m_cam @ v1
+        v2 = m_vp @ m_per @ m_cam @ v2
+        v3 = m_vp @ m_per @ m_cam @ v3
+
+        # Only keeping the x and y coordinates of our triangle vertices.
+        # Now the array is of shape (2,).
+        # Also, we need to divide by w here.
+        v1 = v1[:2] / v1[-1]
+        v2 = v2[:2] / v2[-1]
+        v3 = v3[:2] / v3[-1]
+
+        triangle_image_vertices = np.array([v1, v2, v3])
+
+        (min_x, min_y), (max_x, max_y) = triangle_bounding_box(im_h, im_w, triangle_image_vertices)
+
+        for x in range(min_x, max_x):
+            for y in range(min_y, max_y):
+                # Checking the middle of the pixel
+                if point_in_triangle(np.array([x + 0.5, y + 0.5]), v1, v2, v3):
+                    img[(im_h - 1) - y, x] = c
+                
+    return save_image("my_p4.png", img)
 # P5
 def render_zbuffer_with_color(obj: TriangleMesh, im_w: int, im_h: int):
     """Render the input with z-buffering and color interpolation enabled"""
@@ -507,8 +604,8 @@ if __name__ == "__main__":
     )
     ortho_cube = TriangleMesh(ortho_vertices, triangles, triangle_colors)
     # render_ortho(ortho_cube, im_w, im_h)
-    render_camera(ortho_cube, im_w, im_h)
-    # render_perspective(cube, im_w, im_h)
+    # render_camera(ortho_cube, im_w, im_h)
+    render_perspective(cube, im_w, im_h)
     vertex_colors = np.array(
         [
             [1.0, 0.0, 0.0],
