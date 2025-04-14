@@ -198,7 +198,7 @@ def render_ortho(obj: TriangleMesh, im_w: int, im_h: int):
             for y in range(min_y, max_y + 1):
                 # Checking the middle of the pixel
                 if point_in_triangle(np.array([x + 0.5, y + 0.5]), v1, v2, v3):
-                    img[y, x] = c
+                    img[im_h - y, x] = c
                 
     return save_image("my_p2.png", img)
     
@@ -206,117 +206,101 @@ def render_ortho(obj: TriangleMesh, im_w: int, im_h: int):
 def render_camera(obj: TriangleMesh, im_w: int, im_h: int):
     """Render the orthographic projection of the cube with the specific camera settings"""
     # Calculating the distance of our eye from the image plane
-    eye_x, eye_y, eye_z = (0.2, 0.2, 1)
-    # look_at = (0, 0, 0)
+    e = np.array([0.2, 0.2, 1])
+    lookat = np.array([0, 0, 0]) 
+    g = lookat - e
+    t = np.array([0, 1, 0])
 
-    """
-    For rendering the camera view, we'll want to center the camera at the origin
-    and have it looking down the -z axis.
+    # Calculating u, v, and w values
+    w = - g / np.linalg.norm(g)
+    u = np.cross(t, w) / np.linalg.norm(np.cross(t, w))
+    v = np.cross(w, u)
 
-    To accomplish this, we'll first rotate our camera to be centered over the z-axis
-    by rotating around the y-axis. Next, we'll rotate around the x-axis to 
-    put our camera on the z-axis. And finally, we'll apply a translation matrix
-    to move the camera down the z-axis to be at the origin.
-    """
-
-    # How much we'll rotate around the y-axis by
-    theta_y = -np.arctan(eye_x / eye_z)
-    # How much we'll rotate around the x-axis by
-    theta_x = np.arctan(eye_y / np.sqrt(eye_x**2 + eye_z**2)) 
-
-    # Since our rotations don't change the distance of our camera from the origin,
-    # we just need to shift our z-coordinate by the length of our camera vector.
-    f =  np.sqrt(eye_x**2 + eye_y**2 + eye_z**2)
-
-    # Rotation matrix around the y-axis
-    m_ry = np.array([
-        [np.cos(theta_y), 0, np.sin(theta_y), 0],
-        [0, 1, 0, 0],
-        [-np.sin(theta_y), 0, np.cos(theta_y), 0],
-        [0, 0, 0, 1]
+    # Calculating camera matrix using two (4,4) matrices from the textbook
+    m1 = np.array([
+        [u[0], u[1], u[2], 0],
+        [v[0], v[1], v[2], 0],
+        [w[0], w[1], w[2], 0],
+        [0, 0 ,0 , 1]
     ])
-
-    # Rotation matrix around the x-axis
-    m_rx = np.array([
-        [1, 0, 0, 0],
-        [0, np.cos(theta_x), -np.sin(theta_x), 0],
-        [0, np.sin(theta_x), np.cos(theta_x), 0],
-        [0, 0, 0, 1]
+    m2 = np.array([
+        [1, 0, 0, -e[0]],
+        [0, 1, 0, -e[1]],
+        [0, 0, 1, -e[2]],
+        [0, 0, 0, 1],
     ])
-    
-    # Translation matrix to shift by the focal distance of our camera
-    m_tz = np.array([
-        [1, 0, 0 , 0],
-        [0, 1, 0 , 0],
-        [0, 0, 1 , f],
-        [0, 0, 0 , 1]
+    # Camera matrix is a (4,4) array
+    m_cam = m1 @ m2
+
+    # Viewbox values
+    l = 0
+    r = 12
+    b = 0
+    t = 12
+    f = 0
+    n = 12
+
+    # Viewport matrix
+    m_vp = np.array([
+        [im_w/2, 0, 0, im_w/2],
+        [0, im_h/2, 0, im_h/2],
+        [0, 0, 1, 0],
+        [0, 0, 0, 1],
     ])
 
     # Orthogonal projection matrix
     m_ortho = np.array([
-        [1/6, 0, 0, -1],
-        [0, 1/6, 0, -1],
-        [0, 0, 1/6, -1],
+        [2/(r-l), 0, 0, -(r+l)/(r-l)],
+        [0, 2/(t-b), 0, -(t+b)/(t-b)],
+        [0, 0, 2/(n-f), -(n+f)/(n-f)],
         [0, 0, 0, 1]
     ])
 
-    # Matrix for converting our cube into the scale of our image.
-    m_img = np.array([
-        [im_w, 0, 0, 0],
-        [0, im_h, 0, 0],
-        [0, 0, 0, 0],
-        [im_w, im_h, 0, 0]
-    ])
+    print("camera")
+    print(m_cam)
+    print("ortho")
+    print(m_ortho)
+    print("viewport")
+    print(m_vp)
 
     # Initializing our empty image
     img = np.zeros((im_h, im_w, 3))
 
-    # Each vertex has length 3
-    projected_vertices = []
-    for v in obj.vertices:
-        # Viewport matrix has shape (4,4), so we need to add
-        # an extra homogenous datapoint for the shapes to line up.
-        # Since a vertex is a point, we append c=1.
-        v = np.append(v, [1])
-
-        # Rotating points around the y-axis
-        v = m_ry @ v
-        # Rotating points around the x-axis
-        v = m_rx @ v
-        # Translating points up te z-axis
-        v = m_tz @ v
-        # Applying our ortho matrix to get our orthogonal matrix
-        vp = m_ortho @ v
-        # Dividing by our homogenous coordinate (still a length 4 vector)
-        vp = vp / vp[-1]
-        
-        projected_vertices.append(vp)
-
-    # Converting the projected vertices into a numpy array
-    p_v = np.array(projected_vertices)
-
-    # Converting our world coordinates into image coordinates
+    # Converting each of the vertices into our image viewbox
     for (i1, i2, i3), c in zip(obj.faces, obj.face_colors):
         # Grabbing the three vertices of our triangle in their orthonormal form.
-        # Each one is a numpy array of length 4.
-        tri_v1_o, tri_v2_o, tri_v3_o = p_v[i1], p_v[i2], p_v[i3]
-        # Using the image width and height to translate our vertices
-        # into points (not pixels yet) in our image
-        v1 = ((tri_v1_o @ m_img) / 2)[:2]
-        v2 = ((tri_v2_o @ m_img) / 2)[:2]
-        v3 = ((tri_v3_o @ m_img) / 2)[:2]
-        triangle_image_verties = np.array([v1, v2, v3])
+        # Each one is a numpy array of length 3, but we need to add our homogenous
+        # coordinate w.
+        v1, v2, v3 = obj.vertices[i1], obj.vertices[i2], obj.vertices[i3]
+        # Adding homegenous coordinates
+        v1 = np.append(v1, [1])
+        v2 = np.append(v2, [1])
+        v3 = np.append(v3, [1])
 
-        (min_x, min_y), (max_x, max_y) = triangle_bounding_box(im_h, im_w, triangle_image_verties)
+        # Translating our coordinates using the viewport and image matrices.
+        # The output will be a (4,1) array, as seen on page 141 of the textbook.
+        v1 = m_vp @ m_ortho @ m_cam @ v1
+        v2 = m_vp @ m_ortho @ m_cam @ v2
+        v3 = m_vp @ m_ortho @ m_cam @ v3
 
-        for x in range(min_x, max_x + 1):
-            for y in range(min_y, max_y + 1):
+        # Only keeping the x and y coordinates of our triangle vertices.
+        # Now the array is of shape (2,).
+        # Also, we need to divide by w here.
+        v1 = v1[:2]
+        v2 = v2[:2]
+        v3 = v3[:2]
+
+        triangle_image_vertices = np.array([v1, v2, v3])
+
+        (min_x, min_y), (max_x, max_y) = triangle_bounding_box(im_h, im_w, triangle_image_vertices)
+
+        for x in range(min_x, max_x):
+            for y in range(min_y, max_y):
                 # Checking the middle of the pixel
                 if point_in_triangle(np.array([x + 0.5, y + 0.5]), v1, v2, v3):
-                    img[y, x] = c
-
+                    img[(im_h - 1) - y, x] = c
+                
     return save_image("my_p3.png", img)
-    
 
 # P4
 def render_perspective(obj: TriangleMesh, im_w: int, im_h: int):
@@ -522,8 +506,8 @@ if __name__ == "__main__":
         ]
     )
     ortho_cube = TriangleMesh(ortho_vertices, triangles, triangle_colors)
-    render_ortho(ortho_cube, im_w, im_h)
-    # render_camera(ortho_cube, im_w, im_h)
+    # render_ortho(ortho_cube, im_w, im_h)
+    render_camera(ortho_cube, im_w, im_h)
     # render_perspective(cube, im_w, im_h)
     vertex_colors = np.array(
         [
