@@ -256,13 +256,6 @@ def render_camera(obj: TriangleMesh, im_w: int, im_h: int):
         [0, 0, 0, 1]
     ])
 
-    print("camera")
-    print(m_cam)
-    print("ortho")
-    print(m_ortho)
-    print("viewport")
-    print(m_vp)
-
     # Initializing our empty image
     img = np.zeros((im_h, im_w, 3))
 
@@ -305,15 +298,14 @@ def render_camera(obj: TriangleMesh, im_w: int, im_h: int):
 # P4
 def render_perspective(obj: TriangleMesh, im_w: int, im_h: int):
     """Render the perspective projection with perspective divide"""
-
      # Calculating the distance of our eye from the image plane
-    e = np.array([0.2, 0.2, 1])
+    e = np.array([1, 1, 1])
     lookat = np.array([0, 0, 0]) 
     g = lookat - e
     t = np.array([0, 1, 0])
 
     # Calculating u, v, and w values
-    w = - g / np.linalg.norm(g)
+    w = - (g / np.linalg.norm(g))
     u = np.cross(t, w) / np.linalg.norm(np.cross(t, w))
     v = np.cross(w, u)
 
@@ -334,12 +326,14 @@ def render_perspective(obj: TriangleMesh, im_w: int, im_h: int):
     m_cam = m1 @ m2
 
     # Viewbox values
-    l = 0
-    r = 12
-    b = 0
-    t = 12
-    f = 0
-    n = 12
+    fovy = 65
+    aspect = 4/3
+    f = -100
+    n = -1
+    t = abs(n) * np.tan(np.radians(fovy)/2)
+    r = t * aspect
+    b = -t
+    l = -r
 
     # Viewport matrix
     m_vp = np.array([
@@ -391,9 +385,9 @@ def render_perspective(obj: TriangleMesh, im_w: int, im_h: int):
         # Only keeping the x and y coordinates of our triangle vertices.
         # Now the array is of shape (2,).
         # Also, we need to divide by w here.
-        v1 = v1[:2] / v1[-1]
-        v2 = v2[:2] / v2[-1]
-        v3 = v3[:2] / v3[-1]
+        v1 = v1[:2] / v1[3]
+        v2 = v2[:2] / v2[3]
+        v3 = v3[:2] / v3[3]
 
         triangle_image_vertices = np.array([v1, v2, v3])
 
@@ -403,7 +397,7 @@ def render_perspective(obj: TriangleMesh, im_w: int, im_h: int):
             for y in range(min_y, max_y):
                 # Checking the middle of the pixel
                 if point_in_triangle(np.array([x + 0.5, y + 0.5]), v1, v2, v3):
-                    img[(im_h - 1) - y, x] = c
+                    img[im_h - y, x] = c
                 
     return save_image("my_p4.png", img)
 # P5
