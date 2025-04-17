@@ -43,10 +43,10 @@ def read_image(fname: str) -> np.ndarray:
     return np.asarray(Image.open(fname)).astype(np.float64) / 255
 
 
-def point_in_triangle(p: np.array, A: np.array, B: np.array, C: np.array) -> bool:
+def barycentric_coords(p: np.array, A: np.array, B: np.array, C: np.array) -> list[float]:
     """
-    Checks if a point lies within a 2D triangle using a Barycentric coordinate
-    system.
+    Finds the barycentric coordinates of a point in a triangle
+    with three vertices.
 
     Args:
         p : Point whose inclusion we are testing for
@@ -55,8 +55,8 @@ def point_in_triangle(p: np.array, A: np.array, B: np.array, C: np.array) -> boo
         C : 3rd triangle vertex 
     
     Return:
-        inside : Boolean indicating whether the point is inside our triangle
-    """
+        alpha, beta, gamma : Barycentric coordinates
+    """    
     v1 = A - C
     v2 = B - C
     v3 = p - C
@@ -71,6 +71,24 @@ def point_in_triangle(p: np.array, A: np.array, B: np.array, C: np.array) -> boo
         return False
 
     gamma = 1 - alpha - beta
+
+    return alpha, beta, gamma
+
+def point_in_triangle(p: np.array, A: np.array, B: np.array, C: np.array) -> bool:
+    """
+    Checks if a point lies within a 2D triangle using a Barycentric coordinate
+    system.
+
+    Args:
+        p : Point whose inclusion we are testing for
+        A : 1st triangle vertex
+        B : 2nd triangle vertex
+        C : 3rd triangle vertex 
+    
+    Return:
+        inside : Boolean indicating whether the point is inside our triangle
+    """
+    alpha, beta, gamma = barycentric_coords(p, A, B, C)
 
     return (alpha >= 0) and (beta >= 0) and (gamma >= 0)
 
@@ -92,20 +110,7 @@ def z_depth_of_triangle_point(p: np.array, A: np.array, B: np.array, C: np.array
     Return:
         z : Depth of the point in the triangle
     """
-    v1 = A - C
-    v2 = B - C
-    v3 = p - C
-
-    # (2,2) matrix for our triangle
-    m = np.column_stack((v1, v2))
-    # Solving for the alpha and beta values of our triangle
-    try:
-        alpha, beta = np.linalg.solve(m, v3) 
-    # Triangle with 0 area 
-    except np.linalg.LinAlgError:
-        return False
-
-    gamma = 1 - alpha - beta
+    alpha, beta, gamma = barycentric_coords(p, A, B, C)
 
     # Calculating the weighted sum of the z-coordinates
     # using our Barycentric coordinates.
@@ -113,7 +118,7 @@ def z_depth_of_triangle_point(p: np.array, A: np.array, B: np.array, C: np.array
 
     return z_p
 
-def color_at_point(p: np.array, c: np.arrayA: np.array, B: np.array, C: np.array) -> np.array:
+def color_at_point(p: np.array, c1: np.array, c2: np.array, c3: np.array, A: np.array, B: np.array, C: np.array) -> np.array:
     """
     Args:
         p  : Point whose inclusion we are testing for
@@ -127,8 +132,9 @@ def color_at_point(p: np.array, c: np.arrayA: np.array, B: np.array, C: np.array
     Return:
         c : Interpolated color for a point on the triangle
     """
+    alpha, beta, gamma = barycentric_coords(p, A, B, C)
 
-    return
+    return alpha*c1 + beta*c2 + gamma*c3
 
 def triangle_bounding_box(img_h: int, img_w: int, vertices: np.array) -> np.array:
     """
@@ -566,7 +572,7 @@ def render_zbuffer_with_color(obj: TriangleMesh, im_w: int, im_h: int):
                 p = np.array([x + 0.5, y + 0.5])
                 if point_in_triangle(p, v1[:2], v2[:2], v3[:2]):
                     # Finding the depth of our point in the triangle
-                    z = z_depth_of_triangle_point(p, v1[:2], v2[:2], v3[:2], 
+                    z = -z_depth_of_triangle_point(p, v1[:2], v2[:2], v3[:2], 
                                                      v1[2],  v2[2],  v3[2])
                     
                     # Interpolating the color of the point
@@ -575,7 +581,7 @@ def render_zbuffer_with_color(obj: TriangleMesh, im_w: int, im_h: int):
                     # Z is closer to the camera than the last point in the z_buffer
                     if z < z_buffer[y, x]:
                         # Updating z_buffer 
-                        z = z_buffer[y, x]
+                        z_buffer[y, x] = z
                         img[im_h - y, x] = C
 
     return save_image("my_p5_zbuffer.png", img)
