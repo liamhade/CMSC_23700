@@ -74,6 +74,62 @@ def point_in_triangle(p: np.array, A: np.array, B: np.array, C: np.array) -> boo
 
     return (alpha >= 0) and (beta >= 0) and (gamma >= 0)
 
+def z_depth_of_triangle_point(p: np.array, A: np.array, B: np.array, C: np.array, zA: float, zB: float, zC: float) -> float:
+    """
+    Interpolates the Z-depth of a point given it's barycentric coordinates. Used for 
+    the z-buffer. The method we use is by calculating the weighted sum of
+    the z-coordinates using alpha, beta, and gamma.
+
+    Args:
+        p  : Point whose inclusion we are testing for
+        A  : 1st triangle vertex of shape (2,)
+        B  : 2nd triangle vertex of shape (2,)
+        C  : 3rd triangle vertex of shape (2,)
+        zA : Z-value of the A vertex
+        zB : Z-value of the B vertex
+        zC : Z-value of the C vertex
+    
+    Return:
+        z : Depth of the point in the triangle
+    """
+    v1 = A - C
+    v2 = B - C
+    v3 = p - C
+
+    # (2,2) matrix for our triangle
+    m = np.column_stack((v1, v2))
+    # Solving for the alpha and beta values of our triangle
+    try:
+        alpha, beta = np.linalg.solve(m, v3) 
+    # Triangle with 0 area 
+    except np.linalg.LinAlgError:
+        return False
+
+    gamma = 1 - alpha - beta
+
+    # Calculating the weighted sum of the z-coordinates
+    # using our Barycentric coordinates.
+    z_p = alpha*zA + beta*zB + gamma*zC
+
+    return z_p
+
+def color_at_point(p: np.array, c: np.arrayA: np.array, B: np.array, C: np.array) -> np.array:
+    """
+    Args:
+        p  : Point whose inclusion we are testing for
+        c1 : Color of first vertex
+        c2 : Color of second vertex
+        c3 : Color of third vertex 
+        A  : 1st triangle vertex of shape (2,)
+        B  : 2nd triangle vertex of shape (2,)
+        C  : 3rd triangle vertex of shape (2,)
+    
+    Return:
+        c : Interpolated color for a point on the triangle
+    """
+
+    return
+
 def triangle_bounding_box(img_h: int, img_w: int, vertices: np.array) -> np.array:
     """
     Finds the binding box for a triangle with vertices v1, v2, and v3.
@@ -402,8 +458,127 @@ def render_perspective(obj: TriangleMesh, im_w: int, im_h: int):
     return save_image("my_p4.png", img)
 # P5
 def render_zbuffer_with_color(obj: TriangleMesh, im_w: int, im_h: int):
-    """Render the input with z-buffering and color interpolation enabled"""
-    return save_image("p5.png", YOUR_IMAGE_ARRAY_HERE)
+    # Calculating the distance of our eye from the image plane
+    e = np.array([1, 1, 1])
+    lookat = np.array([0, 0, 0]) 
+    g = lookat - e
+    t = np.array([0, 1, 0])
+
+    # Calculating u, v, and w values
+    w = - (g / np.linalg.norm(g))
+    u = np.cross(t, w) / np.linalg.norm(np.cross(t, w))
+    v = np.cross(w, u)
+
+    # Calculating camera matrix using two (4,4) matrices from the textbook
+    m1 = np.array([
+        [u[0], u[1], u[2], 0],
+        [v[0], v[1], v[2], 0],
+        [w[0], w[1], w[2], 0],
+        [0, 0 ,0 , 1]
+    ])
+    m2 = np.array([
+        [1, 0, 0, -e[0]],
+        [0, 1, 0, -e[1]],
+        [0, 0, 1, -e[2]],
+        [0, 0, 0, 1],
+    ])
+    # Camera matrix is a (4,4) array
+    m_cam = m1 @ m2
+
+    # Viewbox values
+    fovy = 65
+    aspect = 4/3
+    f = -100
+    n = -1
+    t = abs(n) * np.tan(np.radians(fovy)/2)
+    r = t * aspect
+    b = -t
+    l = -r
+
+    # Viewport matrix
+    m_vp = np.array([
+        [im_w/2, 0, 0, im_w/2],
+        [0, im_h/2, 0, im_h/2],
+        [0, 0, 1, 0],
+        [0, 0, 0, 1],
+    ])
+
+    # Orthogonal projection matrix
+    m_ortho = np.array([
+        [2/(r-l), 0, 0, -(r+l)/(r-l)],
+        [0, 2/(t-b), 0, -(t+b)/(t-b)],
+        [0, 0, 2/(n-f), -(n+f)/(n-f)],
+        [0, 0, 0, 1]
+    ])
+
+    # Perspective matrix
+    P = np.array([
+        [n, 0, 0, 0],
+        [0, n, 0, 0],
+        [0, 0, n+f, -f*n],
+        [0, 0, 1, 0]
+    ])
+
+    # Perspective projection matrix
+    m_per = m_ortho @ P
+
+    # Initializing our empty image
+    img = np.zeros((im_h, im_w, 3))
+
+    # Initializing the z-buffer
+    z_buffer = np.full((im_h, im_w), np.inf)
+
+    # Converting each of the vertices into our image viewbox
+    for (i1, i2, i3) in obj.faces:
+        # Grabbing the three vertices of our triangle in their orthonormal form.
+        # Each one is a numpy array of length 3, but we need to add our homogenous
+        # coordinate w.
+        v1, v2, v3 = obj.vertices[i1], obj.vertices[i2], obj.vertices[i3]
+        
+        # Grabbing the color of each vertex
+        c1, c2, c3 = obj.vertex_colors[i1], obj.vertex_colors[i2], obj.vertex_colors[i3]
+        
+        # Adding homegenous coordinates
+        v1 = np.append(v1, [1])
+        v2 = np.append(v2, [1])
+        v3 = np.append(v3, [1])
+
+        # Translating our coordinates using the viewport and image matrices.
+        # The output will be a (4,1) array, as seen on page 141 of the textbook.
+        v1 = m_vp @ m_per @ m_cam @ v1
+        v2 = m_vp @ m_per @ m_cam @ v2
+        v3 = m_vp @ m_per @ m_cam @ v3
+
+        # Only keeping the x and y coordinates of our triangle vertices.
+        # Now the array is of shape (3,).
+        # Also, we need to divide by w here.
+        v1 = v1[:3] / v1[3]
+        v2 = v2[:3] / v2[3]
+        v3 = v3[:3] / v3[3]
+
+        triangle_image_vertices = np.array([v1[:2], v2[:2], v3[:2]])
+
+        (min_x, min_y), (max_x, max_y) = triangle_bounding_box(im_h, im_w, triangle_image_vertices)
+
+        for x in range(min_x, max_x):
+            for y in range(min_y, max_y):
+                # Checking the middle of the pixel
+                p = np.array([x + 0.5, y + 0.5])
+                if point_in_triangle(p, v1[:2], v2[:2], v3[:2]):
+                    # Finding the depth of our point in the triangle
+                    z = z_depth_of_triangle_point(p, v1[:2], v2[:2], v3[:2], 
+                                                     v1[2],  v2[2],  v3[2])
+                    
+                    # Interpolating the color of the point
+                    C = color_at_point(p, c1, c2, c3, v1[:2], v2[:2], v3[:2])
+
+                    # Z is closer to the camera than the last point in the z_buffer
+                    if z < z_buffer[y, x]:
+                        # Updating z_buffer 
+                        z = z_buffer[y, x]
+                        img[im_h - y, x] = C
+
+    return save_image("my_p5_zbuffer.png", img)
     
 
 
@@ -599,7 +774,7 @@ if __name__ == "__main__":
     ortho_cube = TriangleMesh(ortho_vertices, triangles, triangle_colors)
     # render_ortho(ortho_cube, im_w, im_h)
     # render_camera(ortho_cube, im_w, im_h)
-    render_perspective(cube, im_w, im_h)
+    # render_perspective(cube, im_w, im_h)
     vertex_colors = np.array(
         [
             [1.0, 0.0, 0.0],
@@ -613,7 +788,7 @@ if __name__ == "__main__":
         ]
     )
     cube.vertex_colors = vertex_colors
-    # render_zbuffer_with_color(cube, im_w, im_h)
+    render_zbuffer_with_color(cube, im_w, im_h)
 
     objlist = get_big_scene()
     # render_big_scene(objlist, im_w, im_h)
