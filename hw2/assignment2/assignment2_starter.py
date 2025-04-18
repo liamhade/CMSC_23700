@@ -136,6 +136,46 @@ def color_at_point(p: np.array, c1: np.array, c2: np.array, c3: np.array, A: np.
 
     return alpha*c1 + beta*c2 + gamma*c3
 
+def interpolate_texel_perspective(p: np.array, 
+                                  w0: float, w1: float, w2: float,
+                                  uv0: np.array, uv1: np.array, uv2: np.array,
+                                  A: np.array, B: np.array, C: np.array) -> np.array:
+    """
+    Interpolates the texture coordinate (u, v) defined at the point p in the
+    within the triangle with vertices A, B, and C.
+
+    Args:
+        p   : Point whose inclusion we are testing for (before the perspective divide)
+        w0  : Homeogenous coordinate of first triangle vertex
+        w1  : Homogenous coordinate of second triangle vertex
+        w2  : Homogenous coordinate of third triangle vertex
+        uv0 : Coordinate of vertex A in our texture
+        uv1 : Coordinate of vertex B in our texture
+        uv2 : Coordainte of vertex C in our texture
+        A   : 1st triangle vertex
+        B   : 2nd triangle vertex
+        C   : 3rd triangle vertex 
+    
+    Return:
+        texel : Coordinate in our texture space.
+    """
+    alpha, beta, gamma = barycentric_coords(p, A, B, C)
+
+    # Unpacking texture coordinates
+    u0, v0 = uv0 
+    u1, v1 = uv1 
+    u2, v2 = uv2
+
+    # Calculating perspective interpolate (u, v) value
+    us = alpha*(u0 / w0) + beta*(u1 / w1) + gamma*(u2 / w2) 
+    vs = alpha*(v0 / w0) + beta*(v1 / w1) + gamma*(v2 / w2)
+    ones = alpha*(1 / w0) + beta*(1 / w1) + gamma*(1 / w2)
+    
+    u = us / ones 
+    v = vs / ones
+
+    return (u ,v)
+
 def triangle_bounding_box(img_h: int, img_w: int, vertices: np.array) -> np.array:
     """
     Finds the binding box for a triangle with vertices v1, v2, and v3.
@@ -462,10 +502,11 @@ def render_perspective(obj: TriangleMesh, im_w: int, im_h: int):
                     img[im_h - y, x] = c
                 
     return save_image("my_p4.png", img)
+
 # P5
 def render_zbuffer_with_color(obj: TriangleMesh, im_w: int, im_h: int):
     # Calculating the distance of our eye from the image plane
-    e = np.array([1, 1, 1])
+    e = np.array([0.75, 2, 1])
     lookat = np.array([0, 0, 0]) 
     g = lookat - e
     t = np.array([0, 1, 0])
@@ -587,20 +628,281 @@ def render_zbuffer_with_color(obj: TriangleMesh, im_w: int, im_h: int):
     return save_image("my_p5_zbuffer.png", img)
     
 
-
 # P6
 def render_big_scene(objlist: Sequence[TriangleMesh], im_w: int, im_h: int):
     """Render a big scene with multiple shapes"""
-    return save_image("p6.png", YOUR_IMAGE_ARRAY_HERE)
-    
+    # Calculating the distance of our eye from the image plane
+    e = np.array([-0.5, 1, 1])
+    lookat = np.array([0, 0, 0]) 
+    g = lookat - e
+    t = np.array([0, 1, 0])
 
+    # Calculating u, v, and w values
+    w = - (g / np.linalg.norm(g))
+    u = np.cross(t, w) / np.linalg.norm(np.cross(t, w))
+    v = np.cross(w, u)
+
+    # Calculating camera matrix using two (4,4) matrices from the textbook
+    m1 = np.array([
+        [u[0], u[1], u[2], 0],
+        [v[0], v[1], v[2], 0],
+        [w[0], w[1], w[2], 0],
+        [0, 0 ,0 , 1]
+    ])
+    m2 = np.array([
+        [1, 0, 0, -e[0]],
+        [0, 1, 0, -e[1]],
+        [0, 0, 1, -e[2]],
+        [0, 0, 0, 1],
+    ])
+    # Camera matrix is a (4,4) array
+    m_cam = m1 @ m2
+
+    # Viewbox values
+    fovy = 65
+    aspect = 4/3
+    f = -100
+    n = -1
+    t = abs(n) * np.tan(np.radians(fovy)/2)
+    r = t * aspect
+    b = -t
+    l = -r
+
+    # Viewport matrix
+    m_vp = np.array([
+        [im_w/2, 0, 0, im_w/2],
+        [0, im_h/2, 0, im_h/2],
+        [0, 0, 1, 0],
+        [0, 0, 0, 1],
+    ])
+
+    # Orthogonal projection matrix
+    m_ortho = np.array([
+        [2/(r-l), 0, 0, -(r+l)/(r-l)],
+        [0, 2/(t-b), 0, -(t+b)/(t-b)],
+        [0, 0, 2/(n-f), -(n+f)/(n-f)],
+        [0, 0, 0, 1]
+    ])
+
+    # Perspective matrix
+    P = np.array([
+        [n, 0, 0, 0],
+        [0, n, 0, 0],
+        [0, 0, n+f, -f*n],
+        [0, 0, 1, 0]
+    ])
+
+    # Perspective projection matrix
+    m_per = m_ortho @ P
+
+    # Initializing our empty image
+    img = np.zeros((im_h, im_w, 3))
+
+    # Initializing the z-buffer
+    z_buffer = np.full((im_h, im_w), np.inf)
+
+    # Converting each of the vertices into our image viewbox
+    for obj in objlist:
+        for (i1, i2, i3) in obj.faces:
+            # Grabbing the three vertices of our triangle in their orthonormal form.
+            # Each one is a numpy array of length 3, but we need to add our homogenous
+            # coordinate w.
+            v1, v2, v3 = obj.vertices[i1], obj.vertices[i2], obj.vertices[i3]
+            
+            # Grabbing the color of each vertex
+            c1, c2, c3 = obj.vertex_colors[i1], obj.vertex_colors[i2], obj.vertex_colors[i3]
+            
+            # Adding homegenous coordinates
+            v1 = np.append(v1, [1])
+            v2 = np.append(v2, [1])
+            v3 = np.append(v3, [1])
+
+            # Translating our coordinates using the viewport and image matrices.
+            # The output will be a (4,1) array, as seen on page 141 of the textbook.
+            v1 = m_vp @ m_per @ m_cam @ v1
+            v2 = m_vp @ m_per @ m_cam @ v2
+            v3 = m_vp @ m_per @ m_cam @ v3
+
+            # Only keeping the x and y coordinates of our triangle vertices.
+            # Now the array is of shape (3,).
+            # Also, we need to divide by w here.
+            v1 = v1[:3] / v1[3]
+            v2 = v2[:3] / v2[3]
+            v3 = v3[:3] / v3[3]
+
+            triangle_image_vertices = np.array([v1[:2], v2[:2], v3[:2]])
+
+            (min_x, min_y), (max_x, max_y) = triangle_bounding_box(im_h, im_w, triangle_image_vertices)
+
+            for x in range(min_x, max_x):
+                for y in range(min_y, max_y):
+                    # Checking the middle of the pixel
+                    p = np.array([x + 0.5, y + 0.5])
+                    if point_in_triangle(p, v1[:2], v2[:2], v3[:2]):
+                        # Finding the depth of our point in the triangle
+                        z = -z_depth_of_triangle_point(p, v1[:2], v2[:2], v3[:2], 
+                                                        v1[2],  v2[2],  v3[2])
+                        
+                        # Interpolating the color of the point
+                        C = color_at_point(p, c1, c2, c3, v1[:2], v2[:2], v3[:2])
+
+                        # Z is closer to the camera than the last point in the z_buffer
+                        if z < z_buffer[y, x]:
+                            # Updating z_buffer 
+                            z_buffer[y, x] = z
+                            img[im_h - y, x] = C
+
+    return save_image("my_p6.png", img)
+    
 
 # P7
-def texture_map(obj: TriangleMesh, img: np.ndarray, im_w: int, im_h: int):
+def texture_map(obj: TriangleMesh, texture: np.ndarray, im_w: int, im_h: int):
     """Render a cube with the texture img mapped onto its faces"""
-    return save_image("p7.png", YOUR_IMAGE_ARRAY_HERE)
-    
+    # Calculating the distance of our eye from the image plane
+    e = np.array([1, 1, 1])
+    lookat = np.array([0, 0, 0]) 
+    g = lookat - e
+    t = np.array([0, 1, 0])
 
+    # Calculating u, v, and w values
+    w = - (g / np.linalg.norm(g))
+    u = np.cross(t, w) / np.linalg.norm(np.cross(t, w))
+    v = np.cross(w, u)
+
+    # Calculating camera matrix using two (4,4) matrices from the textbook
+    m1 = np.array([
+        [u[0], u[1], u[2], 0],
+        [v[0], v[1], v[2], 0],
+        [w[0], w[1], w[2], 0],
+        [0, 0 ,0 , 1]
+    ])
+    m2 = np.array([
+        [1, 0, 0, -e[0]],
+        [0, 1, 0, -e[1]],
+        [0, 0, 1, -e[2]],
+        [0, 0, 0, 1],
+    ])
+    # Camera matrix is a (4,4) array
+    m_cam = m1 @ m2
+
+    # Viewbox values
+    fovy = 65
+    aspect = 4/3
+    f = -100
+    n = -1
+    t = abs(n) * np.tan(np.radians(fovy)/2)
+    r = t * aspect
+    b = -t
+    l = -r
+
+    # Viewport matrix
+    m_vp = np.array([
+        [im_w/2, 0, 0, im_w/2],
+        [0, im_h/2, 0, im_h/2],
+        [0, 0, 1, 0],
+        [0, 0, 0, 1],
+    ])
+
+    # Orthogonal projection matrix
+    m_ortho = np.array([
+        [2/(r-l), 0, 0, -(r+l)/(r-l)],
+        [0, 2/(t-b), 0, -(t+b)/(t-b)],
+        [0, 0, 2/(n-f), -(n+f)/(n-f)],
+        [0, 0, 0, 1]
+    ])
+
+    # Perspective matrix
+    P = np.array([
+        [n, 0, 0, 0],
+        [0, n, 0, 0],
+        [0, 0, n+f, -f*n],
+        [0, 0, 1, 0]
+    ])
+
+    # Perspective projection matrix
+    m_per = m_ortho @ P
+
+    # Initializing our empty image
+    img = np.zeros((im_h, im_w, 3))
+
+    # Initializing the z-buffer
+    z_buffer = np.full((im_h, im_w), np.inf)
+
+    # Grabbing the height and width of our texture
+    t_h, t_w, _ = texture.shape
+
+    # Converting each of the vertices into our image viewbox
+    for i, (i1, i2, i3) in enumerate(obj.faces):
+        # Grabbing the three vertices of our triangle in their orthonormal form.
+        # Each one is a numpy array of length 3, but we need to add our homogenous
+        # coordinate w.
+        v1, v2, v3 = obj.vertices[i1], obj.vertices[i2], obj.vertices[i3]
+                
+        # Adding homegenous coordinates
+        v1 = np.append(v1, [1])
+        v2 = np.append(v2, [1])
+        v3 = np.append(v3, [1])
+
+        # Translating our coordinates using the viewport and image matrices.
+        # The output will be a (4,1) array, as seen on page 141 of the textbook.
+        v1 = m_vp @ m_per @ m_cam @ v1
+        v2 = m_vp @ m_per @ m_cam @ v2
+        v3 = m_vp @ m_per @ m_cam @ v3
+
+        # Finding (u,v) coordinates for each vertex
+        if i % 2 == 0:
+            uv1 = (0,0)
+            uv2 = (1,0)
+            uv3 = (0,1)
+        else:
+            uv1 = (0,1)
+            uv2 = (1,0)
+            uv3 = (1,1)
+
+        # Saving w values for when do texel interpolation
+        w1 = v1[3]
+        w2 = v2[3]
+        w3 = v3[3]
+
+        # Only keeping the x and y coordinates of our triangle vertices.
+        # Now the array is of shape (3,).
+        # Also, we need to divide by w here.
+        v1 = v1[:3] / w1
+        v2 = v2[:3] / w2
+        v3 = v3[:3] / w3
+
+        triangle_image_vertices = np.array([v1[:2], v2[:2], v3[:2]])
+
+        (min_x, min_y), (max_x, max_y) = triangle_bounding_box(im_h, im_w, triangle_image_vertices)
+
+        for x in range(min_x, max_x):
+            for y in range(min_y, max_y):
+                # Checking the middle of the pixel
+                p = np.array([x + 0.5, y + 0.5])
+                if point_in_triangle(p, v1[:2], v2[:2], v3[:2]):
+                    # Finding the depth of our point in the triangle
+                    z = -z_depth_of_triangle_point(p, v1[:2], v2[:2], v3[:2], 
+                                                      v1[2],  v2[2],  v3[2])
+                    # Z is closer to the camera than the last point in the z_buffer
+                    if z < z_buffer[y, x]:
+                        # Updating z_buffer
+                        z_buffer[y, x] = z
+
+                        # Interpolating the texture value at point p on triangle
+                        u,v = interpolate_texel_perspective(p, w1, w2, w3,
+                                                            uv1, uv2, uv3,
+                                                            v1[:2], v2[:2], v3[:2])
+                        
+                        # Scaling (u, sv) using the texture height and width
+                        u = round(u * t_w) - 1
+                        v = round(v * t_h) - 1
+
+                        # Fetching the texel from our picture
+                        t = texture[v][u]
+
+                        img[im_h - y, x] = t
+
+    return save_image("my_p7_3.png", img)
 
 def get_big_scene():
     # Cube
@@ -794,9 +1096,9 @@ if __name__ == "__main__":
         ]
     )
     cube.vertex_colors = vertex_colors
-    render_zbuffer_with_color(cube, im_w, im_h)
+    # render_zbuffer_with_color(cube, im_w, im_h)
 
     objlist = get_big_scene()
     # render_big_scene(objlist, im_w, im_h)
-    img = read_image("bored_ape.jpeg")
-    # texture_map(cube, img, im_w, im_h)
+    img = read_image("lebron.jpg")
+    texture_map(cube, img, im_w, im_h)
