@@ -155,14 +155,16 @@ class Halfedge(Primitive):
     ############## end boilerplate
 
     def prev(self) -> "Halfedge":
-        # TODO: P2 -- complete this function
         """Return previous halfedge"""
-        raise NotImplementedError("TODO (P2)")
+        he = self
+        # Incrementing until the next halfedge is our starting halfedge.
+        while he.next != self:
+            he = he.next
+        return he
 
     def tip_vertex(self) -> "Vertex":
-        # TODO: P2 -- complete this function
         """Return vertex on the tip of the halfedge"""
-        raise NotImplementedError("TODO (P2)")
+        return self.next.vertex
 
     def serialize(self):
         return (
@@ -183,12 +185,11 @@ class Edge(Primitive):
     """
 
     def two_vertices(self) -> Tuple["Vertex", "Vertex"]:
-        # TODO: P2 -- complete this function
         """
         return the two incident vertices of the edge
         note that the incident vertices are ambiguous to ordering
         """
-        raise NotImplementedError("TODO (P2)")
+        return (self.halfedge.vertex, self.halfedge.tip_vertex())
 
 
 class Face(Primitive):
@@ -199,25 +200,61 @@ class Face(Primitive):
     """
 
     def adjacentHalfedges(self) -> Iterable[Halfedge]:
-        # TODO: P2 -- complete this function
         """Return an iterable of adjacent halfedges"""
-        raise NotImplementedError("TODO (P2)")
+        halfedges = []
+        he = self.halfedge
+        while he not in halfedges:
+            halfedges.append(he)
+            he = he.next
+        return halfedges
 
     def adjacentVertices(self) -> Iterable["Vertex"]:
-        # TODO: P2 -- complete this function
         """Return an iterable of adjacent vertices"""
-        raise NotImplementedError("TODO (P2)")
+
+        '''
+        We want to check the adjacent vertices that are clockwise
+        and anti-clockwise, since we don't yet know if the surfaces
+        in this program are manifold.
+
+        If we could be certain that they were manifold, then checking
+        either direction would suffice.
+
+        Might be hepful to draw out the faces with halfedges if this
+        explanation seems confusing.
+        '''
+        vertices = []
+        he = self.halfedge
+        v  = he.vertex
+        while v not in vertices:
+            vertices.append(v)
+            # Stepping to the next halfedge
+            he = self.next 
+            v  = he.vertex
+        return vertices
 
     def adjacentEdges(self) -> Iterable[Edge]:
-        # TODO: P2 -- complete this function
         """Return an iterable of adjacent edges"""
-        raise NotImplementedError("TODO (P2)")
+        edges = []
+        he = self.halfedge
+        e  = he.edge
+        while e not in edges:
+            edges.append(e)
+            he = he.next
+            e = he.edge
+        return edges
 
     def adjacentFaces(self) -> Iterable["Face"]:
-        # TODO: P2 -- complete this function
         """Return an iterable of adjacent faces"""
-        raise NotImplementedError("TODO (P2)")
-
+        faces = []
+        he = self.halfedge
+        # We have to do twin, since otherwise we'd be fetching
+        # the face that we're on right now.
+        f  = he.twin.face
+        while f not in faces:
+            faces.append(f)
+            he = he.next
+            f = he.twin.face
+        return faces
 
 class Vertex(Primitive):
     """
@@ -227,9 +264,9 @@ class Vertex(Primitive):
     """
 
     def degree(self) -> int:
-        # TODO: P2 -- complete this function
         """Return vertex degree: # of incident edges"""
-        raise NotImplementedError("TODO (P2)")
+        return len(self.adjacentVertices())
+
 
     def isIsolated(self) -> bool:
         # because self.halfedge will throw if __halfedge is None, but we don't
@@ -237,21 +274,54 @@ class Vertex(Primitive):
         return self.__halfedge is None
 
     def adjacentHalfedges(self) -> Iterable[Halfedge]:
-        # TODO: P2 -- complete this function
         """Return an iterable of adjacent halfedges"""
-        raise NotImplementedError("TODO (P2)")
+        halfedges = []
+        he = self.halfedge
+        while he not in halfedges:
+            halfedges.append(he)
+            he = he.prev().twin
+        return halfedges
 
     def adjacentVertices(self) -> Iterable["Vertex"]:
-        # TODO: P2 -- complete this function
         """Return an iterable of adjacent vertices"""
-        raise NotImplementedError("TODO (P2)")
+        # Any vertex is trivially adjacent to itself.
+        adjacent_vertices = []
+
+        # Adding adjacent vertices in a clockwise manner
+        he = self.halfedge
+        v  = he.tip_vertex()
+        while v not in adjacent_vertices:
+            adjacent_vertices.append(v)
+            he = he.prev().twin
+            v  = he.tip_vertex()
+        return adjacent_vertices
+
 
     def adjacentEdges(self) -> Iterable[Edge]:
-        # TODO: P2 -- complete this function
         """Return an iterable of adjacent edges"""
-        raise NotImplementedError("TODO (P2)")
+        adjacent_edges = []
+
+        # Adding adjacent edges in a clockwise manner
+        he = self.halfedge
+        e  = he.edge
+        while e not in adjacent_edges:
+            adjacent_edges.append(e)
+            # Incrementing to the next edge
+            he = he.prev().twin
+            e  = he.edge
+        return adjacent_edges
 
     def adjacentFaces(self) -> Iterable[Face]:
-        # TODO: P2 -- complete this function
         """Return an iterable of adjacent faces"""
-        raise NotImplementedError("TODO (P2)")
+        adjacent_faces = []
+
+        # Adding adjacent edges in a clockwise manner
+        he = self.halfedge
+        f  = he.face
+        while f not in adjacent_faces:
+            adjacent_faces.append(f)
+            # Incrementing to the next edge
+            he = he.prev().twin
+            f  = he.face
+        return adjacent_faces
+
