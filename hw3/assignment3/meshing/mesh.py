@@ -86,7 +86,9 @@ class Mesh:
     # TODO: P4 -- complete this
     def get_3d_pos(self, v: Vertex) -> np.ndarray:
         """Given a vertex primitive, return the position coordinates"""
-        raise NotImplementedError("TODO (P4)")
+        print(v)
+        print(self.vertices)
+        print(self.indices)
 
     # TODO: P4 -- complete this
     def vector(self, h: Halfedge) -> np.ndarray:

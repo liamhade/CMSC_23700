@@ -142,9 +142,9 @@ if __name__ == "__main__":
         mesh.export_obj("ec.obj")
 
     ## run one of these functions at a time per script run
-    load_bunny_and_check()
+    # load_bunny_and_check()
     # example_halfedge0()
-    # example_onering()
+    example_onering()
     # example_export()
     # example_smoothing()
     # example_collapse_simple()

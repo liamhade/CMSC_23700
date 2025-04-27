@@ -228,7 +228,7 @@ class Face(Primitive):
         while v not in vertices:
             vertices.append(v)
             # Stepping to the next halfedge
-            he = self.next 
+            he = he.next 
             v  = he.vertex
         return vertices
 
