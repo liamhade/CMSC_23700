@@ -19,6 +19,7 @@ if __name__ == "__main__":
         # Vertex.adjacentHalfedges, Face.adjacentHalfedges functions (P2, primitive.py)
         # Even before you get to P2, you should make sure thorough_check runs up to
         # and including _check_edges successfully.
+
         mesh.topology.thorough_check()
         return mesh
 
@@ -140,14 +141,46 @@ if __name__ == "__main__":
         mesh.collapse_with_link_condition(edge_ids)
         mesh.view_with_topology()
         mesh.export_obj("ec.obj")
+    
+    def example_nonvmanif():
+        ''' Check if if the non-manifold vertices function works.'''
+        soup = PolygonSoup.from_obj("nonvmanif.obj")
+        mesh = Mesh(soup.vertices, soup.indices)
+        print(f'Manifold vertices: {mesh.topology.hasNonManifoldVertices()}')
+
+    def example_nonemanif():
+        ''' Check if if the non-manifold edges function works.'''
+        soup = PolygonSoup.from_obj("nonemanif.obj")
+        mesh = Mesh(soup.vertices, soup.indices)
+        print(f'Manifold edges: {mesh.topology.hasNonManifoldEdges()}')
+
+    def example_ismanif():
+        ''' Check if if the non-manifold edges function works.'''
+        soup = PolygonSoup.from_obj("bunny.obj")
+        mesh = Mesh(soup.vertices, soup.indices)
+
+        print(f'Manifold vertices: {mesh.topology.hasNonManifoldVertices()}')
+        print(f'Manifold edges: {mesh.topology.hasNonManifoldEdges()}')
+
 
     ## run one of these functions at a time per script run
     # load_bunny_and_check()
     # example_halfedge0()
-    example_onering()
+    # example_onering()
     # example_export()
-    # example_smoothing()
+    # example_nonvmanif()
+    # example_nonemanif()
+    # example_ismanif()
+    example_smoothing()
     # example_collapse_simple()
     # example_collapse_simple_cube()
     # example_collapses()
     # example_collapses_with_link()
+
+    '''
+    TESTING
+    '''
+
+    # primitive = example_halfedge0
+
+

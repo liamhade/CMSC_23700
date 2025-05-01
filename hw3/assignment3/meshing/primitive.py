@@ -1,4 +1,4 @@
-from typing import Optional, Iterable, Tuple
+from typing import Optional, Iterable, Tuple, List
 import numpy as np
 
 """
@@ -282,9 +282,8 @@ class Vertex(Primitive):
             he = he.prev().twin
         return halfedges
 
-    def adjacentVertices(self) -> Iterable["Vertex"]:
+    def adjacentVertices(self) -> List["Vertex"]:
         """Return an iterable of adjacent vertices"""
-        # Any vertex is trivially adjacent to itself.
         adjacent_vertices = []
 
         # Adding adjacent vertices in a clockwise manner

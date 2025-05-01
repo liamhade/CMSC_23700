@@ -196,12 +196,38 @@ class Topology:
         return conn
 
     def hasNonManifoldVertices(self):
-        # TODO: P3 -- return True if any non-manifold vertices found, False otherwise
-        raise NotImplementedError("TODO (P3)")
+        all_adjacents = {v.index: set() for v in self.vertices.values()}
+
+        # Grabbing the adjacent vertices of vertex
+        # by adding pairs of adjacent vertices to our adjacency set.
+        for he in self.halfedges.values():
+            u = he.vertex
+            v = he.tip_vertex()
+            all_adjacents[u.index].add(v)
+            all_adjacents[v.index].add(u)
+
+        # Checking if any vertex has a different set of adjacent
+        # neighbors than those could be accessed on a mainfold surface.
+        for v in self.vertices.values():
+            # Type-casting adjacentVertices sicne it returns a list. 
+            if all_adjacents[v.index] != set(v.adjacentVertices()):
+                return True
+    
+        return False
 
     def hasNonManifoldEdges(self):
-        # TODO: P3 -- return True if any non-manifold edges found, False otherwise
-        raise NotImplementedError("TODO (P3)")
+        halfedges_per_edge = {e.index : 0 for e in self.edges.values()}
+
+        for he in self.halfedges.values():
+            e = he.edge
+            halfedges_per_edge[e.index] += 1
+
+            # This edge is associated with more than two halfedges,
+            # and thus also more than two faces, making it a non-manifold edge.
+            if halfedges_per_edge[e.index] > 2:
+                return True
+        
+        return False
 
     def thorough_check(self):
         if (

@@ -83,22 +83,37 @@ class Mesh:
         vertices, face_indices, edge_indices, _, _ = self.export_soup_with_index_key_maps()
         return vertices, face_indices, edge_indices
 
-    # TODO: P4 -- complete this
     def get_3d_pos(self, v: Vertex) -> np.ndarray:
         """Given a vertex primitive, return the position coordinates"""
-        print(v)
-        print(self.vertices)
-        print(self.indices)
+        vindex = v.index
+        return self.vertices[vindex]
 
-    # TODO: P4 -- complete this
     def vector(self, h: Halfedge) -> np.ndarray:
         """Given a halfedge primitive, return the vector"""
-        raise NotImplementedError("TODO (P4)")
+        return np.array([self.vertices[h.vertex], self.vertices[h.tip_vertex()]])
 
     # TODO: P4 -- complete this
     def faceNormal(self, f: Face) -> np.ndarray:
         """Given a face primitive, compute the unit normal"""
-        raise NotImplementedError("TODO (P4)")
+        # We only need three edges to find the unit normal vector
+        he1 = f.halfedge
+        he2 = f.halfedge.next
+        he3 = f.halfedge.next.next
+
+        # 3 3D points on the face
+        p1 = self.get_3d_pos(he1.vertex)
+        p2 = self.get_3d_pos(he2.vertex)
+        p3 = self.get_3d_pos(he3.vertex)
+
+        # 2 vectors on the face
+        v1 = p1 - p2
+        v2 = p3 - p2
+
+        n = np.cross(v1, v2)
+        # Normalizing the normal vector
+        n /= np.linalg.norm(n)
+
+        return n
 
     # TODO: P5 (make changes in edit.py)
     def smoothMesh(self, n=5):

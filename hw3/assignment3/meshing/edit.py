@@ -35,9 +35,23 @@ class LaplacianSmoothing(MeshEdit):
         self.n_iter = n_iter
 
     def apply(self):
-        # TODO: P5 -- complete this function
-        raise NotImplementedError("TODO (P5)")
+        for i in range(self.n_iter):
+            new_vertice_positions = []
 
+            # Assuming that the vertices are arranged from 0th index to last
+            # in self.topology.vertices.values().
+            for v in self.mesh.topology.vertices.values():
+                neighbors = v.adjacentVertices()
+                neighbor_positions = np.array([self.mesh.get_3d_pos(n) for n in neighbors])
+                avg_x = np.mean(neighbor_positions[:,0])
+                avg_y = np.mean(neighbor_positions[:,1])
+                avg_z = np.mean(neighbor_positions[:,2])
+
+                p = (avg_x, avg_y, avg_z)
+                new_vertice_positions.append(p)
+            
+            # Updating the vertices
+            self.mesh.vertices = np.array(new_vertice_positions)
 
 # TODO: P6 -- add fields to this to use in your collapse
 @dataclass
