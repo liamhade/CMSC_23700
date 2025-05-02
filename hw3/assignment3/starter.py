@@ -162,6 +162,31 @@ if __name__ == "__main__":
         print(f'Manifold vertices: {mesh.topology.hasNonManifoldVertices()}')
         print(f'Manifold edges: {mesh.topology.hasNonManifoldEdges()}')
 
+    def example_test():
+        ''' Workspace for looking at the mesh data.'''
+        soup = PolygonSoup.from_obj("bunny.obj")
+        mesh = Mesh(soup.vertices, soup.indices)
+
+        print("topology.faces")
+        print(mesh.topology.faces)
+        print("vertices")
+        print(mesh.vertices)
+        print("face indices")
+        print(mesh.indices)
+    
+    def example_SHOW_collapse_simple():
+        simple_mesh_soup = PolygonSoup.from_obj("single_edge_collapse.obj")
+        simple_mesh = Mesh(simple_mesh_soup.vertices, simple_mesh_soup.indices)
+
+        print("Before")
+        print(simple_mesh.vertices)
+        simple_mesh.vertices[0] = [0,0,0]
+        simple_mesh.vertices[1] = [0,0,0]
+
+        print("After")
+        print(simple_mesh.vertices)
+
+        simple_mesh.view_with_topology(highlight_edges=[simple_mesh.topology.edges[0]])
 
     ## run one of these functions at a time per script run
     # load_bunny_and_check()
@@ -171,16 +196,13 @@ if __name__ == "__main__":
     # example_nonvmanif()
     # example_nonemanif()
     # example_ismanif()
-    example_smoothing()
+    # example_smoothing()
+    # example_SHOW_collapse_simple()
     # example_collapse_simple()
-    # example_collapse_simple_cube()
+    example_collapse_simple_cube()
     # example_collapses()
     # example_collapses_with_link()
 
-    '''
-    TESTING
-    '''
-
-    # primitive = example_halfedge0
+    # example_test()
 
 

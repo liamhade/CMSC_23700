@@ -1,0 +1,41 @@
+Mesh:
+	vertices = [
+		[0,0],
+		[1,1],
+		[0,2],
+		[1,3],
+		[0,4]
+	]
+	face_indices = [
+		[0, 1, 2],
+		[1, 3, 2],
+		[2, 3, 4]
+	]
+
+	Topology:
+		halfedges = [
+			# Correspond to face A
+			Halfedges(pointer to vA),
+			Halfedges(pointer to vB),
+			Halfedges(pointer to vC),
+
+			# Correspond to face B
+			Halfedges(pointer to vD),
+			Halfedges(pointer to vB),
+			Halfedges(pointer to vC),
+
+			# Correspond to face C
+			Halfedges(pointer to vD),
+			Halfedges(pointer to vB),
+			Halfedges(pointer to vC),
+		]
+		edges = []
+		vertices = [
+			vA: Vertex(index=0, halfedge=none),
+			vB: Vertex(index=1, halfedge=none)
+			vC: Vertex(index=2, halfedge=none)
+			vD: Vertex(index=3, halfedge=none)
+			vE: Vertex(index=4, halfedge=none)
+		]
+		faces = []
+
