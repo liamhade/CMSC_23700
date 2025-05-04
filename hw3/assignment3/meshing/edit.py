@@ -65,9 +65,27 @@ class CollapsePrep:
     namely, references to relevant halfedges and other Primitive objects,
     and any extra information you may need.
     """
+    '''
+    Dictionary that tells you which edge was collapsed /
+    subsumed into another edge. We want this to be a class variable
+    so that it gets updated and maintained across CollapsePrep instances.
+
+    The structure of this variable is of the type:
+        * key   : collapsed / removed edge_id.
+        * value : edge_id of the edge that overwrote it.
+    '''
+    collapsed_edges = {} 
 
     def __init__(self, mesh: Mesh, e_id: int):
-        self.mesh = mesh    
+        self.mesh = mesh
+
+        # We might have overwritten this edge earlier by some other edge,
+        # but we still want to be able to collapse it.
+        # Using a loop incase there are any transitive
+        # effects we need to capture.
+        while e_id in self.collapsed_edges:
+            e_id = self.collapsed_edges[e_id]
+
         self.e = self.mesh.topology.edges[e_id]
 
         # Grabbing the two vertices that are going to be deleted
@@ -76,9 +94,6 @@ class CollapsePrep:
         self.vertex_to_delete = collapsed_vertices[0]
         # The other vertex will be reassigned to have a position equal to our midpoint.
         self.remaining_vertex = collapsed_vertices[1]
-
-        print(self.vertex_to_delete.index)
-        print(self.remaining_vertex.index)
 
         # Converting the vertices into 3D mesh positions
         v1, v2 = collapsed_vertices # Unpacking the vertices tuple 
@@ -96,7 +111,6 @@ class CollapsePrep:
         # List of all the halfedges we'll end up deleting
         self.halfedges_to_delete = [he for f in self.faces_to_delete for he in f.adjacentHalfedges()]
 
-        # All of the edges that will be removed from our edge collapse
         self.edges_to_delete = [self.e]
 
         # Because of our deletions, certain halfedges that once had 
@@ -109,11 +123,15 @@ class CollapsePrep:
             if self.only_tail_on_collapsed_vertex(he, collapsed_vertices):
                 # The twin of this halfedge will be stranded
                 self.edges_to_delete.append(he.edge)
-
+                
                 # Reassigning the newly stranded halfedge
                 stranded_halfedge = he.twin
                 new_twin = he.next.twin
                 new_edge = new_twin.edge
+
+                # If we try to delete this edge again then
+                # we'll map it to this new edge.
+                self.collapsed_edges[he.edge.index] = new_edge.index
 
                 self.halfedge_reassignments[stranded_halfedge] = {"new_twin"   : new_twin, 
                                                                   "new_edge"   : new_edge, 
@@ -174,13 +192,15 @@ def do_collapse(prep: CollapsePrep, mesh: Mesh, e_id: int):
     '''
     Deletion
     '''
-    for f in prep.faces_to_delete:
+
+    for f in set(prep.faces_to_delete):
         del mesh.topology.faces[f.index]
 
-    for e in prep.edges_to_delete:
+    # Making it a set since we don't want to delete any edges twice.
+    for e in set(prep.edges_to_delete):
         del mesh.topology.edges[e.index]
 
-    for d_he in prep.halfedges_to_delete:
+    for d_he in set(prep.halfedges_to_delete):
         del mesh.topology.halfedges[d_he.index]
 
     del mesh.topology.vertices[prep.vertex_to_delete.index]
@@ -195,8 +215,6 @@ def do_collapse(prep: CollapsePrep, mesh: Mesh, e_id: int):
     
     mesh.vertices[prep.remaining_vertex.index] = prep.midpoint
 
-    print(len(mesh.vertices))
-    print(mesh.vertices)
 
 class EdgeCollapseWithLink(MeshEdit):
     def __init__(self, mesh: Mesh, e_id: int):

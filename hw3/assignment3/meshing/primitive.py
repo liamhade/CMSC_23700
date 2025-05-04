@@ -202,10 +202,12 @@ class Face(Primitive):
     def adjacentHalfedges(self) -> Iterable[Halfedge]:
         """Return an iterable of adjacent halfedges"""
         halfedges = []
-        he = self.halfedge
-        while he not in halfedges:
+        he = he_start = self.halfedge
+        while True:
             halfedges.append(he)
             he = he.next
+            if he == he_start:
+                break
         return halfedges
 
     def adjacentVertices(self) -> Iterable["Vertex"]:
@@ -223,37 +225,35 @@ class Face(Primitive):
         explanation seems confusing.
         '''
         vertices = []
-        he = self.halfedge
-        v  = he.vertex
-        while v not in vertices:
-            vertices.append(v)
-            # Stepping to the next halfedge
-            he = he.next 
-            v  = he.vertex
+        he_start = he = self.halfedge
+        while True:
+            vertices.append(he.vertex)
+            he = he.next
+            if he == he_start:
+                break
         return vertices
+
 
     def adjacentEdges(self) -> Iterable[Edge]:
         """Return an iterable of adjacent edges"""
         edges = []
-        he = self.halfedge
-        e  = he.edge
-        while e not in edges:
-            edges.append(e)
+        he = he_start = self.halfedge
+        while True:
+            edges.append(he.edge)
             he = he.next
-            e = he.edge
+            if he == he_start:
+                break
         return edges
 
     def adjacentFaces(self) -> Iterable["Face"]:
         """Return an iterable of adjacent faces"""
         faces = []
-        he = self.halfedge
-        # We have to do twin, since otherwise we'd be fetching
-        # the face that we're on right now.
-        f  = he.twin.face
-        while f not in faces:
-            faces.append(f)
+        he = he_start = self.halfedge
+        while True:
+            faces.append(he.twin.face)
             he = he.next
-            f = he.twin.face
+            if he == he_start:
+                break
         return faces
 
 class Vertex(Primitive):

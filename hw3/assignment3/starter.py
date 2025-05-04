@@ -167,13 +167,56 @@ if __name__ == "__main__":
         soup = PolygonSoup.from_obj("bunny.obj")
         mesh = Mesh(soup.vertices, soup.indices)
 
-        print("topology.faces")
-        print(mesh.topology.faces)
-        print("vertices")
-        print(mesh.vertices)
-        print("face indices")
-        print(mesh.indices)
-    
+        '''
+        edge 3888: get's deleted twice
+            * Is inbetween edge 3060 and 1511
+        edge 3060: first edge that's deleted
+            * should be adjacent to edge 3888
+        edge 1511: second that's deleted
+            * apparently is adjacent to edge 3888, but shouldn't
+              be because we already deleted it
+        
+        edge 4021:
+        edge 4122: 
+
+        halfedge 6850: even after edge
+
+        face 2283: face adjacent to edge 3888
+        face 2492: face adjacent to edge 3888
+        '''
+        edges = [
+            mesh.topology.edges[3888],
+            mesh.topology.edges[4021],
+
+            mesh.topology.edges[3060],
+            mesh.topology.edges[1511],
+            mesh.topology.edges[4122],
+        
+            # mesh.topology.edges[4119],
+        ]
+
+        # mesh.view_with_topology(highlight_edges=edges)
+
+        # print(mesh.topology.faces[2408].adjacentEdges())
+        # print(mesh.topology.faces[2492].adjacentEdges())
+
+        '''
+        Check these vertices: 810 and 1384.
+        '''
+        # [3888, 3060, 1511, 4021, 4122]
+        mesh.collapse(edge_ids=[3888, 3060, 1511])
+
+        # hes_id = [7688, 7686, 7687, 7226, 7224, 7225]
+        # hes = [mesh.topology.halfedges[i] for i in hes_id]
+        # print(f"he edges: {[he.edge for he in hes]}")
+        hes = mesh.topology.faces[2562].adjacentHalfedges() + mesh.topology.faces[2408].adjacentHalfedges()
+        print(hes)
+        mesh.view_with_topology()
+        mesh.collapse(edge_ids=[4021])
+        mesh.view_with_topology()
+
+
+
     def example_SHOW_collapse_simple():
         simple_mesh_soup = PolygonSoup.from_obj("single_edge_collapse.obj")
         simple_mesh = Mesh(simple_mesh_soup.vertices, simple_mesh_soup.indices)
@@ -188,6 +231,17 @@ if __name__ == "__main__":
 
         simple_mesh.view_with_topology(highlight_edges=[simple_mesh.topology.edges[0]])
 
+    def example_custom_mesh():
+        ''' Check if if the non-manifold edges function works.'''
+        soup = PolygonSoup.from_obj("custom.obj")
+        mesh = Mesh(soup.vertices, soup.indices)
+        mesh.view_with_topology()
+        mesh.smoothMesh(n=2)
+        mesh.collapse(edge_ids=[1, 3, 10, 7])
+        mesh.view_with_topology()
+        # Save current mesh to an obj
+        mesh.export_obj("p7_custom.obj")
+
     ## run one of these functions at a time per script run
     # load_bunny_and_check()
     # example_halfedge0()
@@ -196,13 +250,14 @@ if __name__ == "__main__":
     # example_nonvmanif()
     # example_nonemanif()
     # example_ismanif()
-    # example_smoothing()
+    example_smoothing()
     # example_SHOW_collapse_simple()
     # example_collapse_simple()
-    example_collapse_simple_cube()
-    # example_collapses()
+    # example_collapse_simple_cube()
     # example_collapses_with_link()
 
+    # example_collapses()
+    # example_custom_mesh()
     # example_test()
 
 
